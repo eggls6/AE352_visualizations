@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forced Damped Pendulum Cart</title>
+<style>
+  :root {
+    --bg: #0d1015;
+    --panel: #141920;
+    --panel2: #1a2029;
+    --line: #262e3a;
+    --text: #e6ebf2;
+    --muted: #8b96a8;
+    --x: #5cc8ff;       /* cart colour */
+    --th: #ffb35c;      /* pendulum colour */
+    --force: #ff6b8b;
+    --spring: #9be59b;
+  }
+  h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: .2px; }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .eq { font-family: "Cambria Math", "STIX Two Math", Georgia, serif; color: #c9d3e1; font-size: 14px; }
+  .card h2 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .8px; display: flex; justify-content: space-between; align-items: center; }
+  .hint { font-size: 11px; color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
+  .ctrl { margin: 10px 0 14px; }
+  .ctrl label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+  .ctrl label span.v { font-variant-numeric: tabular-nums; color: var(--muted); }
+  input[type=range] { width: 100%; accent-color: var(--x); }
+  .ctrl.force input { accent-color: var(--force); }
+  .ctrl.damp input { accent-color: var(--spring); }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  button, select { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 9px; padding: 7px 11px; font: inherit; font-size: 13px; cursor: pointer; }
+  button:hover, select:hover { border-color: #3a4556; }
+  button.primary { background: #23415a; border-color: #2f5878; }
+  .stats { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 13px; }
+  .stats span:nth-child(odd) { color: var(--muted); }
+  .stats span:nth-child(even) { font-variant-numeric: tabular-nums; text-align: right; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 13px; margin: 4px 0; }
+  .note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { display: flex; flex-direction: column; }
+  header { flex: none; padding: 14px 20px 2px; }
+  main { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 14px; padding: 10px 20px 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px 12px;
+    position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+  .card h2 { flex: none; min-height: 26px; white-space: nowrap; overflow: hidden; }
+  .card h2 > * { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .left { display: grid; gap: 14px; min-width: 0; min-height: 0; grid-template-rows: minmax(0, 1fr) minmax(0, 1.55fr) minmax(0, .6fr); }
+  .row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; min-height: 0; }
+  /* every drawing surface fills its card; canvas buffers follow the wrapper via a ResizeObserver */
+  .cv { position: relative; flex: 1 1 auto; min-height: 0; min-width: 0; }
+  .cv canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .cv canvas.overlay { cursor: crosshair; touch-action: none; }
+  aside { display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: #2c3542 transparent; padding-right: 2px; }
+  aside > .card { flex: none; }
+  /* short or narrow windows: normal scrolling page with fixed panel sizes */
+  @media (max-height: 760px), (max-width: 960px) {
+    html, body { height: auto; }
+    .left { grid-template-rows: none; }
+    aside { overflow: visible; }
+    .cv.wide { flex: none; height: 260px; }
+    .cv.sq { flex: none; aspect-ratio: 1 / 1; }
+    .cv.strip { flex: none; height: 130px; }
+  }
+  @media (max-width: 960px) {
+    main { grid-template-columns: minmax(0, 1fr); padding: 10px 14px 20px; }
+    header { padding: 14px 14px 2px; }
+  }
+  @media (max-width: 560px) { .row2 { grid-template-columns: minmax(0, 1fr); } }
+
+  header { position: relative; padding-right: 190px !important; }
+  #aboutBtn { position: absolute; right: 20px; top: 16px; background: #23415a; border-color: #2f5878; }
+  dialog.about { width: min(760px, calc(100% - 32px)); max-height: 86vh; overflow: auto; padding: 22px 28px 24px;
+    background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  dialog.about::backdrop { background: rgba(5,7,10,.66); backdrop-filter: blur(2px); }
+  dialog.about h2 { margin: 0 0 4px; font-size: 19px; font-weight: 650; }
+  dialog.about h3 { margin: 20px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .8px; }
+  dialog.about p, dialog.about li { color: #d3dbe6; line-height: 1.62; font-size: 14px; }
+  dialog.about p { margin: 0 0 10px; }
+  dialog.about ul { margin: 0; padding-left: 20px; }
+  dialog.about li { margin-bottom: 7px; }
+  dialog.about li b { color: var(--text); font-weight: 600; }
+  dialog.about .m { font-family: "Cambria Math", "STIX Two Math", Georgia, serif; white-space: nowrap; }
+  dialog.about .close { position: sticky; top: 0; float: right; margin: -6px -10px 0 12px; }
+  @media (max-width: 560px) { header { padding-right: 14px !important; } #aboutBtn { position: static; margin-top: 8px; } }
+
+  .fr { display:inline-flex; flex-direction:column; vertical-align:middle; text-align:center; font-size:.85em; line-height:1.1; margin:0 .15em; }
+  .fr > span:first-child { border-bottom:1px solid currentColor; padding:0 .15em; }
+
+  .site-footer {
+    text-align: center;
+    padding: 20px;
+    /* background-color: #f1f5f9; */
+    /* color: #33475b; */
+    font-size: 0.9rem;
+  }
+
+  .site-footer p {
+    margin: 5px 0;
+  }
+
+  .ai-ack {
+    font-style: italic;
+    color: #64748b;
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><img src="../logos/uiuc_logo.png" alt="University of Illinois logo", style="max-width: 10%; height: auto;"> </div>
+  <h1>Forced, damped pendulum on a spring-mounted cart</h1>
+  <div class="sub eq">
+    m₂l cosθ <span class="fr"><span>d²θ</span><span>dt²</span></span>
+    + (m₁+m₂) <span class="fr"><span>d²x</span><span>dt²</span></span>
+    = m₂l (<span class="fr"><span>dθ</span><span>dt</span></span>)² sinθ
+    − kx − b <span class="fr"><span>dx</span><span>dt</span></span> + F(t),&nbsp; <br>
+    <span class="fr"><span>d²θ</span><span>dt²</span></span>
+    + (cosθ / l) <span class="fr"><span>d²x</span><span>dt²</span></span>
+    = −(g/l) sinθ &nbsp;·&nbsp; F(t) = F₀ cos(Ωt)
+  </div>
+  <button id="aboutBtn" onclick="document.getElementById('about').showModal()">About this problem</button>
+</header>
+
+<main>
+  <div class="left">
+    <div class="card">
+      <h2>Motion
+        <span class="legend">
+          <span><span class="dot" style="background:var(--x)"></span>cart</span>
+          <span><span class="dot" style="background:var(--th)"></span>pendulum</span>
+          <span><span class="dot" style="background:var(--force)"></span>F(t)</span>
+        </span>
+      </h2>
+      <div class="cv wide"><canvas id="cartCv"></canvas></div>
+    </div>
+
+    <div class="row2">
+      <div class="card">
+        <h2>Cart phase space (x, v) <span class="hint">drag to set state</span></h2>
+        <div class="cv sq">
+          <canvas id="pxFlow"></canvas>
+          <canvas id="pxOver" class="overlay"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Pendulum phase space (θ, ω) <span class="hint">drag to set state</span></h2>
+        <div class="cv sq">
+          <canvas id="ptFlow"></canvas>
+          <canvas id="ptOver" class="overlay"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Time series <span class="legend">
+        <span><span class="dot" style="background:var(--x)"></span>x(t)</span>
+        <span><span class="dot" style="background:var(--th)"></span>θ(t)</span>
+      </span></h2>
+      <div class="cv strip"><canvas id="stripCv"></canvas></div>
+    </div>
+  </div>
+
+  <aside>
+    <div class="card">
+      <h2>Playback</h2>
+      <div class="btns">
+        <button id="playBtn" class="primary">Pause</button>
+        <button id="resetBtn">Reset</button>
+        <button id="kickBtn">Random kick</button>
+        <button id="clearBtn">Clear trails</button>
+      </div>
+      <div class="ctrl" style="margin-bottom:4px">
+        <label>Simulation speed <span class="v" id="speedV"></span></label>
+        <input type="range" id="speed" min="0.1" max="3" step="0.05" value="1">
+      </div>
+      <div class="ctrl" style="margin:8px 0 0">
+        <label for="preset">Preset</label>
+        <select id="preset" style="width:100%">
+          <option value="">Choose a preset…</option>
+          <option value="free">Free oscillation (no damping, no forcing)</option>
+          <option value="damped">Damped, unforced</option>
+          <option value="lowres">Forced at slow mode (ω₋ ≈ 0.70)</option>
+          <option value="resonant">Forced at fast mode (ω₊ ≈ 4.49)</option>
+          <option value="chaos">Strong forcing (chaotic)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Damping &amp; forcing</h2>
+      <div class="ctrl damp">
+        <label>Cart damping b <span class="v" id="bV"></span></label>
+        <input type="range" id="b" min="0" max="3" step="0.01" value="0.5">
+      </div>
+      <div class="ctrl force">
+        <label>Forcing amplitude F₀ <span class="v" id="F0V"></span></label>
+        <input type="range" id="F0" min="0" max="15" step="0.05" value="0.5">
+      </div>
+      <div class="ctrl force">
+        <label>Forcing frequency Ω <span class="v" id="OmV"></span></label>
+        <input type="range" id="Om" min="0" max="8" step="0.01" value="1">
+      </div>
+      <details>
+        <summary>System parameters</summary>
+        <div class="ctrl"><label>Spring constant k <span class="v" id="kV"></span></label>
+          <input type="range" id="k" min="0" max="20" step="0.1" value="1"></div>
+        <div class="ctrl"><label>Cart mass m₁ <span class="v" id="m1V"></span></label>
+          <input type="range" id="m1" min="0.1" max="5" step="0.05" value="1"></div>
+        <div class="ctrl"><label>Bob mass m₂ <span class="v" id="m2V"></span></label>
+          <input type="range" id="m2" min="0.1" max="5" step="0.05" value="1"></div>
+        <div class="ctrl"><label>Pendulum length l <span class="v" id="lV"></span></label>
+          <input type="range" id="l" min="0.3" max="2" step="0.01" value="1"></div>
+      </details>
+    </div>
+
+    <div class="card">
+      <h2>State</h2>
+      <div class="stats">
+        <span>t</span><span id="sT"></span>
+        <span>x</span><span id="sX"></span>
+        <span>v</span><span id="sV"></span>
+        <span>θ</span><span id="sTh"></span>
+        <span>ω</span><span id="sW"></span>
+        <span>F(t)</span><span id="sF"></span>
+        <span>Energy</span><span id="sE"></span>
+        <span>Normal mode ω₋</span><span id="sW0"></span>
+        <span>Normal mode ω₊</span><span id="sWc"></span>
+      </div>
+    </div>
+
+    <div class="card note">
+      The penulum cart state vector is four-dimensional. Each phase portrait shows a live slice.
+      The flowing background in the (x, v) panel is the vector field with θ, ω and t fixed at their current values.
+      The (θ, ω) panel fixes x, v and t the same way. The bright curve is the actual trajectory, projected onto that plane.
+    </div>
+  </aside>
+</main>
+
+
+<dialog class="about" id="about">
+  <form method="dialog"><button class="close" aria-label="Close">Close ✕</button></form>
+  <h2>Forced, damped pendulum on a spring-mounted cart</h2>
+
+  <h3>Introduction</h3>
+  <p>The pendulum cart is a useful model that can, among other things, illustrate the behavior of Skycranes that were pioneered by NASA to land heavy rovers on Mars. 
+  A pendulum of length <span class="m">l</span> with bob mass <span class="m">m₂</span> hangs from a cart of mass
+  <span class="m">m₁</span> that rolls on a horizontal track. A spring (stiffness <span class="m">k</span>) and a dashpot
+  (damping <span class="m">b</span>) tie the cart to a fixed wall, and an external force
+  <span class="m">F(t) = F₀ cos Ωt</span> pushes the cart back and forth.</p>
+  <p>The system essentially consists of two coupled, constrained oscillators: a mass on a spring and a pendulum, trading energy through the pivot.
+  The same model describes an overhead crane carrying a swinging load, a tuned-mass damper in a tall building,
+  and loads that sway on moving vehicles.</p>
+
+  <h3>Synopsis</h3>
+  <ul>
+    <li><b>Equations of motion.</b> With the cart position <span class="m">x</span> and the pendulum angle
+    <span class="m">θ</span> as generalized coordinates, the Euler-Lagrange equations give the two coupled equations shown at the top of the page.
+    They are linear in the accelerations <span class="m">ẍ</span> and <span class="m">θ̈</span>, so each time step solves a 2×2
+    linear system and advances the state numerically.</li>
+    <li><b>Equilibria.</b> The hanging state <span class="m">x = 0, θ = 0</span> is stable. The inverted pendulum
+    <span class="m">θ = ±π</span> is unstable and shows up as a saddle in the <span class="m">(θ, ω)</span> portrait.</li>
+    <li><b>Small oscillations.</b> Linearizing about the hanging state gives two normal modes. Their frequencies are the roots of
+    <span class="m">m₁l ω⁴ − (kl + (m₁+m₂)g) ω² + kg = 0</span>: a slow, cart-dominated mode and a fast,
+    pendulum-dominated mode. The coupling pushes the two frequencies apart, so neither equals √(g/l) or √(k/(m₁+m₂)).
+    The State panel shows both frequencies for the current parameters.</li>
+    <li><b>Damping.</b> With <span class="m">b &gt; 0</span> and no forcing, the motion loses energy and every trajectory
+    spirals into the rest state, which is a stable focus. Only the cart is damped directly. The pendulum loses energy only
+    through its coupling to the cart.</li>
+    <li><b>Forcing.</b> Once the transients decay, a weak drive produces steady oscillation at the drive frequency
+    <span class="m">Ω</span>. Driving near either normal-mode frequency gives resonance, and the damping limits how large
+    the response gets. At large amplitude the nonlinear terms (<span class="m">sin θ</span> and the centrifugal term
+    <span class="m">m₂l θ̇² sin θ</span>) take over. The resonance then shifts in frequency, several different steady
+    responses can coexist, and strong forcing makes the motion chaotic.</li>
+    <li><b>Reading the phase portraits.</b> The full state <span class="m">(x, v, θ, ω)</span> is four-dimensional, and the
+    forcing also depends on <span class="m">t</span>. Each portrait is therefore a slice of the 4D phase space: the flowing background visualizes the
+    vector field with the other subsystem frozen at its current state. The bright curve is the real trajectory
+    projected onto that plane. The slices change from moment to moment, which illustrates the coupling at work.</li>
+  </ul>
+</dialog>
+<script>
+  document.getElementById('about').addEventListener('click', e => { if (e.target.id === 'about') e.target.close(); });
+</script>
+<script>
+(() => {
+  // ---------------- parameters & state ----------------
+  const P = { m1: 1, m2: 1, l: 1, k: 1, b: 0.5, F0: 0.5, Om: 1, g: 9.81 };
+  const INIT = { x: 1.0, v: 0, th: 1.2, w: 0 };
+  let y = [INIT.x, INIT.v, INIT.th, INIT.w];
+  let t = 0;
+  let running = true;
+  let speed = 1;
+
+  const force = tt => P.F0 * Math.cos(P.Om * tt);
+
+  // Solve the 2x2 linear system for (x_dd, th_dd)
+  function acc(x, v, th, w, tt) {
+    const c = Math.cos(th), s = Math.sin(th);
+    const a11 = P.m2 * P.l * c, a12 = P.m1 + P.m2;
+    const a21 = 1, a22 = c / P.l;
+    const r1 = P.m2 * P.l * w * w * s - P.k * x - P.b * v + force(tt);
+    const r2 = -(P.g / P.l) * s;
+    const det = a11 * a22 - a12 * a21; // = -(m1 + m2 sin^2 th)
+    return [(a11 * r2 - a21 * r1) / det, (r1 * a22 - a12 * r2) / det];
+  }
+  function deriv(s, tt) {
+    const [xdd, thdd] = acc(s[0], s[1], s[2], s[3], tt);
+    return [s[1], xdd, s[3], thdd];
+  }
+  function rk4(s, tt, h) {
+    const k1 = deriv(s, tt);
+    const s2 = s.map((v, i) => v + 0.5 * h * k1[i]);
+    const k2 = deriv(s2, tt + 0.5 * h);
+    const s3 = s.map((v, i) => v + 0.5 * h * k2[i]);
+    const k3 = deriv(s3, tt + 0.5 * h);
+    const s4 = s.map((v, i) => v + h * k3[i]);
+    const k4 = deriv(s4, tt + h);
+    return s.map((v, i) => v + (h / 6) * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]));
+  }
+  const wrap = a => { a = (a + Math.PI) % (2 * Math.PI); if (a < 0) a += 2 * Math.PI; return a - Math.PI; };
+  function energy() {
+    const [x, v, th, w] = y;
+    const KE = 0.5 * (P.m1 + P.m2) * v * v + P.m2 * P.l * v * w * Math.cos(th) + 0.5 * P.m2 * P.l * P.l * w * w;
+    const PE = 0.5 * P.k * x * x - P.m2 * P.g * P.l * Math.cos(th);
+    return KE + PE;
+  }
+
+  // ---------------- canvas helpers ----------------
+  const DPR = () => Math.min(window.devicePixelRatio || 1, 2);
+  function fit(cv) {
+    const r = cv.getBoundingClientRect(), d = DPR();
+    const w = Math.max(1, Math.round(r.width * d)), h = Math.max(1, Math.round(r.height * d));
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; return true; }
+    return false;
+  }
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const COL = { bg: css('--panel'), line: css('--line'), text: css('--text'), muted: css('--muted'),
+    x: css('--x'), th: css('--th'), force: css('--force'), spring: css('--spring') };
+
+  // Speed colour ramp for flow particles (deep blue -> cyan -> pale)
+  const RAMP = [];
+  for (let i = 0; i < 12; i++) {
+    const u = i / 11;
+    const r = Math.round(40 + 190 * u * u), g = Math.round(90 + 150 * u), b = Math.round(170 + 80 * Math.sqrt(u));
+    RAMP.push(`rgba(${r},${g},${b},${0.35 + 0.5 * u})`);
+  }
+
+  // ---------------- phase panels ----------------
+  function makePanel(flowId, overId, opts) {
+    const flow = document.getElementById(flowId), over = document.getElementById(overId);
+    const p = { flow, over, fctx: flow.getContext('2d'), octx: over.getContext('2d'), ...opts,
+      trail: [], N: 900, px: null, py: null, age: null };
+    p.px = new Float32Array(p.N); p.py = new Float32Array(p.N); p.age = new Float32Array(p.N);
+    const seed = i => {
+      p.px[i] = p.xr[0] + Math.random() * (p.xr[1] - p.xr[0]);
+      p.py[i] = p.yr[0] + Math.random() * (p.yr[1] - p.yr[0]);
+      p.age[i] = Math.random() * 80;
+    };
+    for (let i = 0; i < p.N; i++) seed(i);
+    p.seed = seed;
+    p.margin = () => { const d = DPR(); return { l: 40 * d, r: 10 * d, t: 10 * d, b: 30 * d }; };
+    p.map = () => {
+      const m = p.margin(), W = over.width, H = over.height;
+      const sx = (W - m.l - m.r) / (p.xr[1] - p.xr[0]);
+      const sy = (H - m.t - m.b) / (p.yr[1] - p.yr[0]);
+      return { m, W, H,
+        X: a => m.l + (a - p.xr[0]) * sx,
+        Y: b => H - m.b - (b - p.yr[0]) * sy,
+        iX: X => p.xr[0] + (X - m.l) / sx,
+        iY: Y => p.yr[0] + (H - m.b - Y) / sy };
+    };
+    // pointer interaction: set state by dragging
+    let dragging = false;
+    const setFromEvt = e => {
+      const r = over.getBoundingClientRect(), d = DPR(), M = p.map();
+      const a = Math.min(p.xr[1], Math.max(p.xr[0], M.iX((e.clientX - r.left) * d)));
+      const b = Math.min(p.yr[1], Math.max(p.yr[0], M.iY((e.clientY - r.top) * d)));
+      p.set(a, b);
+      p.trail.push(null);
+    };
+    over.addEventListener('pointerdown', e => { dragging = true; over.setPointerCapture(e.pointerId); setFromEvt(e); });
+    over.addEventListener('pointermove', e => { if (dragging) setFromEvt(e); });
+    over.addEventListener('pointerup', () => dragging = false);
+    over.addEventListener('pointercancel', () => dragging = false);
+    return p;
+  }
+
+  const panelX = makePanel('pxFlow', 'pxOver', {
+    xr: [-4, 4], yr: [-6, 6], xl: 'x', yl: 'v', color: COL.x, fieldScale: 10,
+    field: (a, b) => [b, acc(a, b, y[2], y[3], t)[0]],
+    get: () => [y[0], y[1]],
+    set: (a, b) => { y[0] = a; y[1] = b; },
+    xticks: [-4, -2, 0, 2, 4], yticks: [-6, -3, 0, 3, 6],
+  });
+  const panelT = makePanel('ptFlow', 'ptOver', {
+    xr: [-Math.PI, Math.PI], yr: [-8, 8], xl: 'θ', yl: 'ω', color: COL.th, fieldScale: 14,
+    field: (a, b) => [b, acc(y[0], y[1], a, b, t)[1]],
+    get: () => [wrap(y[2]), y[3]],
+    set: (a, b) => { y[2] = a; y[3] = b; },
+    xticks: [-Math.PI, -Math.PI / 2, 0, Math.PI / 2, Math.PI], xtickLabels: ['−π', '−π/2', '0', 'π/2', 'π'],
+    yticks: [-8, -4, 0, 4, 8], wrapX: true,
+  });
+  const panels = [panelX, panelT];
+
+  function stepParticles(p) {
+    const M = p.map(), ctx = p.fctx;
+    // fade previous frame
+    ctx.globalCompositeOperation = 'source-over';
+    // fade old streaks toward transparent (no colour residue builds up)
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = 'rgba(0,0,0,0.06)';
+    ctx.fillRect(0, 0, p.flow.width, p.flow.height);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.save();
+    ctx.beginPath(); ctx.rect(M.m.l, M.m.t, M.W - M.m.l - M.m.r, M.H - M.m.t - M.m.b); ctx.clip();
+    ctx.lineWidth = 1.1 * DPR(); ctx.lineCap = 'round';
+    const buckets = RAMP.map(() => []);
+    const h = 0.012;
+    for (let i = 0; i < p.N; i++) {
+      const a = p.px[i], b = p.py[i];
+      const f = p.field(a, b);
+      const sp = Math.hypot(f[0], f[1]);
+      // advance with speed-limited step so fast regions don't jump across the panel
+      const lim = Math.min(1, 1.6 / (sp + 1e-9));
+      let na = a + f[0] * h * Math.max(lim, 0.15), nb = b + f[1] * h * Math.max(lim, 0.15);
+      p.age[i] += 1;
+      const out = na < p.xr[0] || na > p.xr[1] || nb < p.yr[0] || nb > p.yr[1];
+      if (out && p.wrapX && nb >= p.yr[0] && nb <= p.yr[1]) {
+        na = wrap(na); p.px[i] = na; p.py[i] = nb; continue;
+      }
+      if (out || p.age[i] > 120 || !isFinite(na) || !isFinite(nb)) { p.seed(i); p.age[i] = 0; continue; }
+      const bi = Math.min(RAMP.length - 1, Math.floor((sp / p.fieldScale) * RAMP.length));
+      buckets[bi].push(M.X(a), M.Y(b), M.X(na), M.Y(nb));
+      p.px[i] = na; p.py[i] = nb;
+    }
+    buckets.forEach((seg, bi) => {
+      if (!seg.length) return;
+      ctx.strokeStyle = RAMP[bi];
+      ctx.beginPath();
+      for (let j = 0; j < seg.length; j += 4) { ctx.moveTo(seg[j], seg[j + 1]); ctx.lineTo(seg[j + 2], seg[j + 3]); }
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  function drawOverlay(p) {
+    const M = p.map(), ctx = p.octx, d = DPR();
+    ctx.clearRect(0, 0, M.W, M.H);
+    // axes & grid
+    ctx.strokeStyle = 'rgba(140,155,180,0.12)'; ctx.lineWidth = 1;
+    ctx.fillStyle = COL.muted; ctx.font = `${11 * d}px system-ui, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    p.xticks.forEach((v, i) => {
+      const X = M.X(v);
+      ctx.beginPath(); ctx.moveTo(X, M.m.t); ctx.lineTo(X, M.H - M.m.b); ctx.stroke();
+      ctx.fillText(p.xtickLabels ? p.xtickLabels[i] : v, X, M.H - M.m.b + 5 * d);
+    });
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    p.yticks.forEach(v => {
+      const Y = M.Y(v);
+      ctx.beginPath(); ctx.moveTo(M.m.l, Y); ctx.lineTo(M.W - M.m.r, Y); ctx.stroke();
+      ctx.fillText(v, M.m.l - 6 * d, Y);
+    });
+    ctx.strokeStyle = COL.line; ctx.lineWidth = 1.2 * d;
+    ctx.strokeRect(M.m.l, M.m.t, M.W - M.m.l - M.m.r, M.H - M.m.t - M.m.b);
+    ctx.fillStyle = COL.text; ctx.font = `italic ${13 * d}px Georgia, serif`;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillText(p.xl, M.W - M.m.r - 6 * d, M.H - M.m.b - 4 * d);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText(p.yl, M.m.l + 6 * d, M.m.t + 4 * d);
+
+    // trajectory trail with fading alpha
+    ctx.save();
+    ctx.beginPath(); ctx.rect(M.m.l, M.m.t, M.W - M.m.l - M.m.r, M.H - M.m.t - M.m.b); ctx.clip();
+    const tr = p.trail, n = tr.length;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const chunks = 24;
+    for (let c = 0; c < chunks; c++) {
+      const i0 = Math.floor((c / chunks) * n), i1 = Math.floor(((c + 1) / chunks) * n);
+      ctx.globalAlpha = 0.08 + 0.92 * ((c + 1) / chunks) ** 1.6;
+      ctx.strokeStyle = p.color; ctx.lineWidth = 2 * d;
+      ctx.beginPath();
+      let pen = false;
+      for (let i = Math.max(0, i0 - 1); i <= Math.min(n - 1, i1); i++) {
+        const q = tr[i];
+        if (!q) { pen = false; continue; }
+        const X = M.X(q[0]), Y = M.Y(q[1]);
+        if (!pen) { ctx.moveTo(X, Y); pen = true; } else ctx.lineTo(X, Y);
+      }
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    // current point with glow
+    const [a, b] = p.get();
+    const X = M.X(a), Y = M.Y(b);
+    const grd = ctx.createRadialGradient(X, Y, 0, X, Y, 16 * d);
+    grd.addColorStop(0, p.color); grd.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(X, Y, 16 * d, 0, 2 * Math.PI); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(X, Y, 3.2 * d, 0, 2 * Math.PI); ctx.fill();
+    ctx.restore();
+  }
+
+  function pushTrails() {
+    const TMAX = 1800;
+    // cart
+    panelX.trail.push([y[0], y[1]]);
+    // pendulum (break line at wrap-around)
+    const a = wrap(y[2]);
+    const last = panelT.trail[panelT.trail.length - 1];
+    if (last && Math.abs(a - last[0]) > Math.PI) panelT.trail.push(null);
+    panelT.trail.push([a, y[3]]);
+    panels.forEach(p => { if (p.trail.length > TMAX) p.trail.splice(0, p.trail.length - TMAX); });
+  }
+
+  // ---------------- cart animation ----------------
+  const cartCv = document.getElementById('cartCv'), cctx = cartCv.getContext('2d');
+  const bobTrail = [];
+  let camX = 0;
+
+  function drawCart() {
+    const W = cartCv.width, H = cartCv.height, d = DPR(), ctx = cctx;
+    ctx.clearRect(0, 0, W, H);
+    const pivotY = H * 0.46;
+    const scale = Math.min(W / 10, (H * 0.42) / P.l);
+    const [x, , th] = y;
+    // camera follows the cart softly once it strays far
+    const half = W / scale / 2;
+    const target = Math.abs(x) > half - 2.2 ? x - Math.sign(x) * (half - 2.2) : 0;
+    camX += (target - camX) * 0.08;
+    const SX = wx => W / 2 + (wx - camX) * scale;
+
+    const cartW = 1.1 * scale * 0.9, cartH = 0.45 * scale * 0.9;
+    const trackY = pivotY + cartH / 2 + 0.16 * scale;
+
+    // raised rail (pendulum hangs below it through a slot) with moving distance marks
+    ctx.strokeStyle = '#3a4556'; ctx.lineWidth = 3 * d;
+    ctx.beginPath(); ctx.moveTo(0, trackY); ctx.lineTo(W, trackY); ctx.stroke();
+    ctx.strokeStyle = 'rgba(140,155,180,0.25)'; ctx.lineWidth = 1 * d;
+    ctx.fillStyle = 'rgba(140,155,180,0.45)'; ctx.font = `${9 * d}px system-ui, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    const step = 0.5;
+    for (let gx = Math.floor((camX - half) / step) * step; gx < camX + half + step; gx += step) {
+      const X = SX(gx), major = Math.abs(gx - Math.round(gx)) < 1e-6;
+      ctx.beginPath(); ctx.moveTo(X, trackY + 2 * d); ctx.lineTo(X, trackY + (major ? 7 : 4) * d); ctx.stroke();
+      if (major) ctx.fillText(Math.round(gx), X, trackY + 8 * d);
+    }
+    // floor at the bottom of the panel
+    const floorY = H - 8 * d;
+    ctx.strokeStyle = COL.line; ctx.lineWidth = 2 * d;
+    ctx.beginPath(); ctx.moveTo(0, floorY); ctx.lineTo(W, floorY); ctx.stroke();
+    // equilibrium marker
+    ctx.setLineDash([4 * d, 5 * d]);
+    ctx.strokeStyle = 'rgba(140,155,180,0.3)';
+    ctx.beginPath(); ctx.moveTo(SX(0), pivotY - P.l * scale - 6 * d); ctx.lineTo(SX(0), trackY); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // wall
+    const wallX = -4.6;
+    const WX = SX(wallX);
+    ctx.fillStyle = '#2a3341';
+    ctx.fillRect(WX - 10 * d, pivotY - cartH * 1.2, 10 * d, trackY - (pivotY - cartH * 1.2));
+    ctx.strokeStyle = 'rgba(140,155,180,0.3)';
+    for (let yy = pivotY - cartH * 1.2; yy < trackY; yy += 9 * d) {
+      ctx.beginPath(); ctx.moveTo(WX - 10 * d, yy + 8 * d); ctx.lineTo(WX - 18 * d, yy); ctx.stroke();
+    }
+
+    // spring (zig-zag), stretched from the wall to the cart's left side
+    const cx = SX(x);
+    const sx0 = WX, sx1 = cx - cartW / 2, sy = pivotY;
+    const coils = 14, amp = 0.12 * scale;
+    ctx.strokeStyle = COL.spring; ctx.lineWidth = 2 * d; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(sx0, sy);
+    const lead = Math.min(14 * d, Math.abs(sx1 - sx0) * 0.1);
+    ctx.lineTo(sx0 + lead, sy);
+    for (let i = 0; i <= coils; i++) {
+      const u = i / coils;
+      const X = sx0 + lead + u * (sx1 - sx0 - 2 * lead);
+      ctx.lineTo(X, sy + (i === 0 || i === coils ? 0 : (i % 2 ? -amp : amp)));
+    }
+    ctx.lineTo(sx1, sy); ctx.stroke();
+
+    // damper indicator (dashpot under the spring), opacity ~ b
+    if (P.b > 0.01) {
+      ctx.globalAlpha = Math.min(1, 0.25 + P.b / 2);
+      const dy = pivotY + cartH * 0.32;
+      const mid = (sx0 + sx1) / 2;
+      ctx.strokeStyle = COL.muted; ctx.lineWidth = 1.5 * d;
+      ctx.beginPath(); ctx.moveTo(sx0, dy); ctx.lineTo(mid - 10 * d, dy); ctx.stroke();
+      ctx.strokeRect(mid - 14 * d, dy - 6 * d, 26 * d, 12 * d);
+      ctx.beginPath(); ctx.moveTo(mid + 4 * d, dy - 5 * d); ctx.lineTo(mid + 4 * d, dy + 5 * d);
+      ctx.moveTo(mid + 4 * d, dy); ctx.lineTo(sx1, dy); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // cart body
+    const r = 7 * d;
+    ctx.fillStyle = '#1f3448'; ctx.strokeStyle = COL.x; ctx.lineWidth = 2 * d;
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(cx - cartW / 2, pivotY - cartH / 2, cartW, cartH, r)
+                  : ctx.rect(cx - cartW / 2, pivotY - cartH / 2, cartW, cartH);
+    ctx.fill(); ctx.stroke();
+    // wheels (rotate with motion)
+    const wr = 0.1 * scale;
+    [-0.3, 0.3].forEach(o => {
+      const wx = cx + o * cartW, wy = trackY - wr;
+      ctx.fillStyle = '#0d1015'; ctx.strokeStyle = COL.x; ctx.lineWidth = 1.5 * d;
+      ctx.beginPath(); ctx.arc(wx, wy, wr, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+      const ang = (x * scale) / wr;
+      ctx.beginPath(); ctx.moveTo(wx, wy); ctx.lineTo(wx + wr * Math.cos(ang), wy + wr * Math.sin(ang)); ctx.stroke();
+    });
+
+    // forcing arrow
+    const F = force(t);
+    if (P.F0 > 0.001) {
+      const len = Math.max(-1, Math.min(1, F / 8)) * 1.6 * scale;
+      const ay = pivotY - cartH / 2 - 14 * d;
+      const ax0 = cx, ax1 = cx + len;
+      ctx.strokeStyle = COL.force; ctx.fillStyle = COL.force; ctx.lineWidth = 3 * d;
+      ctx.beginPath(); ctx.moveTo(ax0, ay); ctx.lineTo(ax1, ay); ctx.stroke();
+      if (Math.abs(len) > 6 * d) {
+        const s = Math.sign(len);
+        ctx.beginPath(); ctx.moveTo(ax1 + s * 8 * d, ay); ctx.lineTo(ax1 - s * 2 * d, ay - 6 * d);
+        ctx.lineTo(ax1 - s * 2 * d, ay + 6 * d); ctx.closePath(); ctx.fill();
+      }
+      ctx.font = `${11 * d}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillText(`F = ${F.toFixed(2)}`, cx, ay - 6 * d);
+    }
+
+    // pendulum: bob at (x + l sinθ, -l cosθ)
+    const bx = cx + P.l * Math.sin(th) * scale, by = pivotY + P.l * Math.cos(th) * scale;
+    bobTrail.push([x + P.l * Math.sin(th), P.l * Math.cos(th)]);
+    if (bobTrail.length > 240) bobTrail.shift();
+    ctx.lineCap = 'round';
+    for (let i = 1; i < bobTrail.length; i++) {
+      ctx.globalAlpha = (i / bobTrail.length) ** 2 * 0.7;
+      ctx.strokeStyle = COL.th; ctx.lineWidth = 2 * d;
+      ctx.beginPath();
+      ctx.moveTo(SX(bobTrail[i - 1][0]), pivotY + bobTrail[i - 1][1] * scale);
+      ctx.lineTo(SX(bobTrail[i][0]), pivotY + bobTrail[i][1] * scale);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#c9d3e1'; ctx.lineWidth = 2.5 * d;
+    ctx.beginPath(); ctx.moveTo(cx, pivotY); ctx.lineTo(bx, by); ctx.stroke();
+    ctx.fillStyle = '#0d1015'; ctx.strokeStyle = '#c9d3e1';
+    ctx.beginPath(); ctx.arc(cx, pivotY, 4 * d, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+    const br = (0.11 + 0.05 * Math.sqrt(P.m2)) * scale * 0.9;
+    const grd = ctx.createRadialGradient(bx - br / 3, by - br / 3, br / 6, bx, by, br);
+    grd.addColorStop(0, '#ffe0b8'); grd.addColorStop(1, COL.th);
+    ctx.fillStyle = grd;
+    ctx.beginPath(); ctx.arc(bx, by, br, 0, 2 * Math.PI); ctx.fill();
+  }
+
+  // ---------------- time-series strip ----------------
+  const stripCv = document.getElementById('stripCv'), sctx = stripCv.getContext('2d');
+  const hist = []; const HWIN = 20; // seconds shown
+  function drawStrip() {
+    const W = stripCv.width, H = stripCv.height, d = DPR(), ctx = sctx;
+    ctx.clearRect(0, 0, W, H);
+    const m = { l: 34 * d, r: 8 * d, t: 6 * d, b: 18 * d };
+    const t0 = t - HWIN;
+    while (hist.length && hist[0][0] < t0 - 1) hist.shift();
+    const yr = 4;
+    const X = tt => m.l + ((tt - t0) / HWIN) * (W - m.l - m.r);
+    const Y = v => m.t + (1 - (v + yr) / (2 * yr)) * (H - m.t - m.b);
+    ctx.strokeStyle = 'rgba(140,155,180,0.12)'; ctx.lineWidth = 1;
+    ctx.fillStyle = COL.muted; ctx.font = `${10 * d}px system-ui, sans-serif`;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    [-4, -2, 0, 2, 4].forEach(v => {
+      ctx.beginPath(); ctx.moveTo(m.l, Y(v)); ctx.lineTo(W - m.r, Y(v)); ctx.stroke();
+      ctx.fillText(v, m.l - 5 * d, Y(v));
+    });
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (let s = Math.ceil(t0 / 5) * 5; s <= t; s += 5) ctx.fillText(`${s}s`, X(s), H - m.b + 3 * d);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(m.l, m.t, W - m.l - m.r, H - m.t - m.b); ctx.clip();
+    [[1, COL.x], [2, COL.th]].forEach(([k, col]) => {
+      ctx.strokeStyle = col; ctx.lineWidth = 1.8 * d; ctx.beginPath();
+      let pen = false, prev = null;
+      hist.forEach(h => {
+        let v = h[k];
+        if (k === 2) { v = wrap(v); if (prev !== null && Math.abs(v - prev) > Math.PI) pen = false; prev = v; }
+        if (!pen) { ctx.moveTo(X(h[0]), Y(v)); pen = true; } else ctx.lineTo(X(h[0]), Y(v));
+      });
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  // ---------------- UI ----------------
+  const $ = id => document.getElementById(id);
+  const fmt = (v, n = 2) => (v >= 0 ? ' ' : '') + v.toFixed(n);
+  const sliderKeys = ['b', 'F0', 'Om', 'k', 'm1', 'm2', 'l'];
+  function syncSliders() {
+    sliderKeys.forEach(k => { $(k).value = P[k]; $(k + 'V').textContent = (+P[k]).toFixed(2); });
+  }
+  sliderKeys.forEach(k => $(k).addEventListener('input', e => {
+    P[k] = parseFloat(e.target.value); $(k + 'V').textContent = P[k].toFixed(2);
+    $('preset').value = '';
+  }));
+  $('speed').addEventListener('input', e => { speed = +e.target.value; $('speedV').textContent = speed.toFixed(2) + '×'; });
+  $('speedV').textContent = '1.00×';
+  $('playBtn').onclick = () => { running = !running; $('playBtn').textContent = running ? 'Pause' : 'Play'; };
+  function clearTrails() { panels.forEach(p => p.trail.length = 0); bobTrail.length = 0; hist.length = 0; }
+  $('clearBtn').onclick = () => { panels.forEach(p => p.trail.length = 0); bobTrail.length = 0; };
+  $('resetBtn').onclick = () => { y = [INIT.x, INIT.v, INIT.th, INIT.w]; t = 0; clearTrails(); };
+  $('kickBtn').onclick = () => {
+    y = [(Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 2 * Math.PI, (Math.random() - 0.5) * 6];
+    panels.forEach(p => p.trail.push(null)); bobTrail.length = 0;
+  };
+  const PRESETS = {
+    free:     { b: 0,   F0: 0,   Om: 1,    k: 1, m1: 1, m2: 1, l: 1 },
+    damped:   { b: 1.2, F0: 0,   Om: 1,    k: 1, m1: 1, m2: 1, l: 1 },
+    lowres:   { b: 0.3, F0: 0.6, Om: 0.70, k: 1, m1: 1, m2: 1, l: 1 },
+    resonant: { b: 0.4, F0: 2.5, Om: 4.49, k: 1, m1: 1, m2: 1, l: 1 },
+    chaos:    { b: 0.3, F0: 9,   Om: 2.2,  k: 2, m1: 1, m2: 1, l: 1 },
+  };
+  $('preset').addEventListener('change', e => {
+    const pr = PRESETS[e.target.value]; if (!pr) return;
+    Object.assign(P, pr); syncSliders();
+    y = [INIT.x, INIT.v, INIT.th, INIT.w]; t = 0; clearTrails();
+  });
+  syncSliders();
+
+  function updateStats() {
+    $('sT').textContent = t.toFixed(2) + ' s';
+    $('sX').textContent = fmt(y[0]); $('sV').textContent = fmt(y[1]);
+    $('sTh').textContent = fmt(wrap(y[2])) + ' rad'; $('sW').textContent = fmt(y[3]);
+    $('sF').textContent = fmt(force(t)); $('sE').textContent = fmt(energy());
+    // small-angle normal modes: m1 l w^4 - (k l + (m1+m2) g) w^2 + k g = 0
+    const A = P.m1 * P.l, B = P.k * P.l + (P.m1 + P.m2) * P.g, C = P.k * P.g;
+    const D = Math.sqrt(Math.max(0, B * B - 4 * A * C));
+    $('sW0').textContent = Math.sqrt(Math.max(0, (B - D) / (2 * A))).toFixed(2) + ' rad/s';
+    $('sWc').textContent = Math.sqrt((B + D) / (2 * A)).toFixed(2) + ' rad/s';
+  }
+
+  // ---------------- main loop ----------------
+  function resizeAll() {
+    [cartCv, stripCv].forEach(fit);
+    panels.forEach(p => {
+      fit(p.flow);
+      fit(p.over);
+    });
+  }
+  window.addEventListener('resize', resizeAll);
+
+  // keep every canvas buffer matched to its on-screen size, whatever changes it
+  const ro = new ResizeObserver(() => resizeAll());
+  document.querySelectorAll('.cv').forEach(el => ro.observe(el));
+  resizeAll();
+
+  let last = performance.now(), statTick = 0, histTick = 0;
+  const H_STEP = 0.002;
+  function frame(now) {
+    const dt = Math.min((now - last) / 1000, 1 / 30); last = now;
+    if (running) {
+      const nsteps = Math.max(1, Math.round((speed * dt) / H_STEP));
+      for (let i = 0; i < nsteps; i++) {
+        y = rk4(y, t, H_STEP); t += H_STEP;
+        if (!y.every(isFinite)) { y = [INIT.x, INIT.v, INIT.th, INIT.w]; clearTrails(); break; }
+      }
+      pushTrails();
+      if ((histTick += dt) > 0.02) { hist.push([t, y[0], y[2]]); histTick = 0; }
+    }
+    panels.forEach(p => { stepParticles(p); drawOverlay(p); });
+    drawCart();
+    drawStrip();
+    if ((statTick += dt) > 0.1) { updateStats(); statTick = 0; }
+    requestAnimationFrame(frame);
+  }
+  updateStats();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+<footer class="site-footer">
+  <p>&copy; 2026 University of Illinois Urbana-Champaign. All rights reserved.</p>
+  <p class="ai-ack">Content assisted and generated with AI support.</p>
+</footer>
+</html>

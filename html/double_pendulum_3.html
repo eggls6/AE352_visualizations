@@ -1,0 +1,802 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Double Pendulum Explorer</title>
+<style>
+  :root {
+    --bg: #0d1015;
+    --panel: #141920;
+    --panel2: #1a2029;
+    --line: #262e3a;
+    --text: #e6ebf2;
+    --muted: #8b96a8;
+    --p1: #5cc8ff;     /* inner bob */
+    --p2: #ffb35c;     /* outer bob */
+    --twin: #c792ff;   /* shadow pendulum */
+    --ok: #9be59b;
+  }
+  h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: .2px; }
+  .sub { color: #c9d3e1; font-family: "Cambria Math", "STIX Two Math", Georgia, serif; font-size: 13.5px; margin-top: 3px; }
+  .card h2 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  #motionCv { cursor: grab; touch-action: none; }
+  .hint { font-size: 11px; color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
+  .ctrl { margin: 10px 0 14px; }
+  .ctrl label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+  .ctrl label span.v { font-variant-numeric: tabular-nums; color: var(--muted); }
+  input[type=range] { width: 100%; accent-color: var(--p1); }
+  .ctrl.o input { accent-color: var(--p2); }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  button, select { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 9px; padding: 7px 11px; font: inherit; font-size: 13px; cursor: pointer; }
+  button:hover, select:hover { border-color: #3a4556; }
+  button.primary { background: #23415a; border-color: #2f5878; }
+  .toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-top: 10px; cursor: pointer; }
+  .toggle input { accent-color: var(--twin); width: 16px; height: 16px; }
+  .stats { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 13px; }
+  .stats span:nth-child(odd) { color: var(--muted); }
+  .stats span:nth-child(even) { font-variant-numeric: tabular-nums; text-align: right; }
+  .legend { display: flex; gap: 12px; font-size: 12px; color: var(--muted); text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+  .note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .mini { padding: 4px 9px; font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 400; }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { display: flex; flex-direction: column; }
+  header { flex: none; padding: 14px 20px 2px; }
+  main { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 14px; padding: 10px 20px 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px 12px;
+    position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+  .card h2 { flex: none; min-height: 26px; white-space: nowrap; overflow: hidden; }
+  .card h2 > * { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .left { display: grid; gap: 14px; min-width: 0; min-height: 0; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) minmax(0, .42fr); }
+  .row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; min-height: 0; }
+  /* every drawing surface fills its card; canvas buffers follow the wrapper via a ResizeObserver */
+  .cv { position: relative; flex: 1 1 auto; min-height: 0; min-width: 0; }
+  .cv canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .cv canvas.overlay { cursor: crosshair; touch-action: none; }
+  aside { display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: #2c3542 transparent; padding-right: 2px; }
+  aside > .card { flex: none; }
+  /* short or narrow windows: normal scrolling page with fixed panel sizes */
+  @media (max-height: 760px), (max-width: 960px) {
+    html, body { height: auto; }
+    .left { grid-template-rows: none; }
+    aside { overflow: visible; }
+    .cv.wide { flex: none; height: 300px; }
+    .cv.sq { flex: none; aspect-ratio: 1 / 1; }
+    .cv.strip { flex: none; height: 130px; }
+  }
+  @media (max-width: 960px) {
+    main { grid-template-columns: minmax(0, 1fr); padding: 10px 14px 20px; }
+    header { padding: 14px 14px 2px; }
+  }
+  @media (max-width: 560px) { .row2 { grid-template-columns: minmax(0, 1fr); } }
+
+  header { position: relative; padding-right: 190px !important; }
+  #aboutBtn { position: absolute; right: 20px; top: 16px; background: #23415a; border-color: #2f5878; }
+  dialog.about { width: min(760px, calc(100% - 32px)); max-height: 86vh; overflow: auto; padding: 22px 28px 24px;
+    background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  dialog.about::backdrop { background: rgba(5,7,10,.66); backdrop-filter: blur(2px); }
+  dialog.about h2 { margin: 0 0 4px; font-size: 19px; font-weight: 650; }
+  dialog.about h3 { margin: 20px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .8px; }
+  dialog.about p, dialog.about li { color: #d3dbe6; line-height: 1.62; font-size: 14px; }
+  dialog.about p { margin: 0 0 10px; }
+  dialog.about ul { margin: 0; padding-left: 20px; }
+  dialog.about li { margin-bottom: 7px; }
+  dialog.about li b { color: var(--text); font-weight: 600; }
+  dialog.about .m { font-family: "Cambria Math", "STIX Two Math", Georgia, serif; white-space: nowrap; }
+  dialog.about .close { position: sticky; top: 0; float: right; margin: -6px -10px 0 12px; }
+  @media (max-width: 560px) { header { padding-right: 14px !important; } #aboutBtn { position: static; margin-top: 8px; } }
+
+  .fr { display:inline-flex; flex-direction:column; vertical-align:middle; text-align:center; font-size:.85em; line-height:1.1; margin:0 .15em; }
+  .fr > span:first-child { border-bottom:1px solid currentColor; padding:0 .15em; }
+
+
+  .site-footer {
+  text-align: center;
+  padding: 20px;
+  /* background-color: #f1f5f9; */
+  /* color: #33475b; */
+  font-size: 0.9rem;
+  }
+
+  .site-footer p {
+    margin: 5px 0;
+  }
+
+  .ai-ack {
+    font-style: italic;
+    color: #64748b;
+  }
+</style>
+</head>
+<body>
+<header>
+   <div class="logo"><img src="../logos/uiuc_logo.png" alt="University of Illinois logo", style="max-width: 10%; height: auto;"> </div>
+  <h1>Double pendulum: phase space and chaos</h1>
+  Equations of motion
+  <div class="sub">
+    (m₁+m₂)l₁ <span class="fr"><span>d²θ₁</span><span>dt²</span></span>
+    + m₂l₂ <span class="fr"><span>d²θ₂</span><span>dt²</span></span> cos(θ₁−θ₂)
+    + m₂l₂ (<span class="fr"><span>dθ₂</span><span>dt</span></span>)² sin(θ₁−θ₂)
+    + (m₁+m₂)g sinθ₁ = 0,&nbsp; <br>
+    l₂ <span class="fr"><span>d²θ₂</span><span>dt²</span></span>
+    + l₁ <span class="fr"><span>d²θ₁</span><span>dt²</span></span> cos(θ₁−θ₂)
+    − l₁ (<span class="fr"><span>dθ₁</span><span>dt</span></span>)² sin(θ₁−θ₂)
+    + g sinθ₂ = 0
+  </div>
+  <button id="aboutBtn" onclick="document.getElementById('about').showModal()">About this problem</button>
+</header>
+
+<main>
+  <div class="left">
+    <div class="row2">
+      <div class="card">
+        <h2>Motion <span class="hint">drag a bob to reposition</span></h2>
+        <div class="cv sq"><canvas id="motionCv"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>Poincaré section <span class="legend">θ₂ = 0, θ̇₂ &gt; 0</span>
+          <button class="mini" id="clearPoinc">Clear</button></h2>
+        <div class="cv sq"><canvas id="poincCv"></canvas></div>
+      </div>
+    </div>
+
+    <div class="row2">
+      <div class="card">
+        <h2>Inner arm (θ₁, ω₁) <span class="hint">drag to set state</span></h2>
+        <div class="cv sq">
+          <canvas id="p1Flow"></canvas>
+          <canvas id="p1Over" class="overlay"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Outer arm (θ₂, ω₂) <span class="hint">drag to set state</span></h2>
+        <div class="cv sq">
+          <canvas id="p2Flow"></canvas>
+          <canvas id="p2Over" class="overlay"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Separation from twin, log₁₀ |Δstate|
+        <span class="legend"><span><span class="dot" style="background:var(--twin)"></span>twin started 10⁻⁶ rad away</span></span>
+      </h2>
+      <div class="cv strip"><canvas id="sepCv"></canvas></div>
+    </div>
+  </div>
+
+  <aside>
+    <div class="card">
+      <h2>Playback</h2>
+      <div class="btns">
+        <button id="playBtn" class="primary">Pause</button>
+        <button id="resetBtn">Reset</button>
+        <button id="kickBtn">Random start</button>
+        <button id="clearBtn">Clear trails</button>
+      </div>
+      <div class="ctrl" style="margin-bottom:4px">
+        <label>Simulation speed <span class="v" id="speedV"></span></label>
+        <input type="range" id="speed" min="0.1" max="3" step="0.05" value="1">
+      </div>
+      <label class="toggle"><input type="checkbox" id="twinT" checked> Show twin pendulum (chaos demo)</label>
+      <div class="ctrl" style="margin:12px 0 0">
+        <label for="preset">Preset</label>
+        <select id="preset" style="width:100%">
+          <option value="">Choose a preset…</option>
+          <option value="small">Small swings (nearly regular)</option>
+          <option value="mode1">In-phase normal mode</option>
+          <option value="mode2">Anti-phase normal mode</option>
+          <option value="moderate">Moderate energy (mixed)</option>
+          <option value="chaos">High energy (chaotic)</option>
+          <option value="flip">Near-inverted start</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Initial angles</h2>
+      <div class="ctrl">
+        <label>θ₁ at start <span class="v" id="a1V"></span></label>
+        <input type="range" id="a1" min="-180" max="180" step="0.5" value="120">
+      </div>
+      <div class="ctrl o">
+        <label>θ₂ at start <span class="v" id="a2V"></span></label>
+        <input type="range" id="a2" min="-180" max="180" step="0.5" value="-20">
+      </div>
+      <h2 style="margin-top:6px">System parameters</h2>
+      <div class="ctrl"><label>Inner mass m₁ <span class="v" id="m1V"></span></label>
+        <input type="range" id="m1" min="0.1" max="5" step="0.05" value="1"></div>
+      <div class="ctrl o"><label>Outer mass m₂ <span class="v" id="m2V"></span></label>
+        <input type="range" id="m2" min="0.1" max="5" step="0.05" value="1"></div>
+      <div class="ctrl"><label>Inner length l₁ <span class="v" id="l1V"></span></label>
+        <input type="range" id="l1" min="0.3" max="2" step="0.01" value="1"></div>
+      <div class="ctrl o"><label>Outer length l₂ <span class="v" id="l2V"></span></label>
+        <input type="range" id="l2" min="0.3" max="2" step="0.01" value="1"></div>
+      <div class="ctrl"><label>Gravity g <span class="v" id="gV"></span></label>
+        <input type="range" id="g" min="1" max="25" step="0.01" value="9.81"></div>
+    </div>
+
+    <div class="card">
+      <h2>State</h2>
+      <div class="stats">
+        <span>t</span><span id="sT"></span>
+        <span>θ₁</span><span id="sA1"></span>
+        <span>ω₁</span><span id="sW1"></span>
+        <span>θ₂</span><span id="sA2"></span>
+        <span>ω₂</span><span id="sW2"></span>
+        <span>Energy E</span><span id="sE"></span>
+        <span>Drift ΔE/|E₀|</span><span id="sDE"></span>
+        <span>Section points</span><span id="sNP"></span>
+      </div>
+    </div>
+
+    <div class="card note">
+      The double pendulum consists is a coupled system of mathematical pendula subject to gravity. There is no friction or forcing, which means total energy is conserved. The drift readout checks the RK4 integrator.
+      The state (θ₁, ω₁, θ₂, ω₂) is four-dimensional. Each phase panel shows a slice of the 4D phase space.
+      The Poincaré section samples the orbit each time θ₂ passes 0 going upward. Regular motion traces closed curves; chaotic motion scatters points across a region.
+    </div>
+  </aside>
+</main>
+
+
+<dialog class="about" id="about">
+  <form method="dialog"><button class="close" aria-label="Close">Close ✕</button></form>
+  <h2>The double pendulum</h2>
+
+  <h3>Introduction</h3>
+  <p>The double pendulum is a staple of nonlinear dynamical systems theory. A second pendulum hangs from the bob of the first, both subject to gravity. Two point masses <span class="m">m₁</span> and
+  <span class="m">m₂</span> sit on massless rigid rods of length <span class="m">l₁</span> and <span class="m">l₂</span>,
+  and both swing freely in a vertical plane. There is no friction and no driving force.</p>
+  <p>The double pendulum is one of the simplest mechanical systems that shows deterministic chaos. The equations are exact and fully
+  deterministic, yet at high enough energy the motion cannot be predicted in practice: two starts that differ by a
+  millionth of a radian soon follow completely different paths.</p>
+
+  <h3>Synopsis</h3>
+  <ul>
+    <li><b>Equations of motion.</b> With the two angles <span class="m">θ₁</span> and <span class="m">θ₂</span>
+    (measured from the vertical) as coordinates, Lagrange's equations give the coupled, nonlinear pair shown at the top
+    of the page. The simulation solves them for <span class="m">θ̈₁</span> and <span class="m">θ̈₂</span> through numerical integration.</li>
+    <li><b>Energy conservation.</b> With no friction or forcing, the total energy <span class="m">E</span> is conserved. The motion
+    therefore stays on a three-dimensional energy surface inside the four-dimensional phase space
+    <span class="m">(θ₁, ω₁, θ₂, ω₂)</span>. The drift readout in the State panel checks the integrator against this.</li>
+    <li><b>Small oscillations.</b> Near the hanging state the system behaves like two coupled linear oscillators with two
+    normal modes. For equal masses and lengths the frequencies are <span class="m">ω² = (2 ∓ √2) g/l</span>. In the slower
+    in-phase mode <span class="m">θ₂/θ₁ = +√2</span>; in the faster anti-phase mode <span class="m">θ₂/θ₁ = −√2</span>.
+    The two normal-mode presets start exactly on these modes.</li>
+    <li><b>Sensitivity to initial conditions.</b> The twin pendulum starts <span class="m">10⁻⁶</span> rad away. In the
+    chaotic regime the log-separation plot climbs roughly in a straight line, which means the gap grows exponentially. The
+    slope estimates the largest Lyapunov exponent. In the regular regime the separation only grows slowly, roughly in
+    proportion to time.</li>
+    <li><b>From order to chaos.</b> At low energy the motion is quasi-periodic. Each phase space trajectory stays on an invariant torus and traces
+    a closed curve in the Poincaré section. As the energy rises, these tori break up (as described by KAM theory) and a
+    chaotic sea spreads across the section, with islands of regular motion left inside it. At high energy most orbits
+    fill whole regions of the section.</li>
+    <li><b>Flips.</b> For equal masses and lengths released from rest, energy conservation rules out any flip over the top
+    if <span class="m">3 cos θ₁ + cos θ₂ &gt; 2</span>. Above that threshold flips become possible, and when they happen
+    is extremely sensitive to the starting angles.</li>
+    <li><b>Reading the phase portraits.</b> Each <span class="m">(θ, ω)</span> panel is a two-dimensional slice of a
+    four-dimensional flow. The background shows the vector field with the other arm frozen at its current state, and the
+    bright curve is the true trajectory projected onto that plane.</li>
+  </ul>
+</dialog>
+<script>
+  document.getElementById('about').addEventListener('click', e => { if (e.target.id === 'about') e.target.close(); });
+</script>
+<script>
+(() => {
+  // ---------------- physics ----------------
+  const P = { m1: 1, m2: 1, l1: 1, l2: 1, g: 9.81 };
+  let init = { a1: 120 * Math.PI / 180, a2: -20 * Math.PI / 180 };
+  let y = [init.a1, 0, init.a2, 0];      // [θ1, ω1, θ2, ω2]
+  let z = null;                           // twin state
+  const EPS = 1e-6;
+  let t = 0, tTwin = 0, running = true, speed = 1, showTwin = true;
+  let E0 = 0;
+
+  function acc(t1, w1, t2, w2) {
+    const { m1, m2, l1, l2, g } = P;
+    const d = t1 - t2, s = Math.sin(d), c = Math.cos(d);
+    const den = 2 * m1 + m2 - m2 * Math.cos(2 * d);     // ≥ 2 m1 > 0
+    const a1 = (-g * (2 * m1 + m2) * Math.sin(t1) - m2 * g * Math.sin(t1 - 2 * t2)
+               - 2 * s * m2 * (w2 * w2 * l2 + w1 * w1 * l1 * c)) / (l1 * den);
+    const a2 = (2 * s * (w1 * w1 * l1 * (m1 + m2) + g * (m1 + m2) * Math.cos(t1)
+               + w2 * w2 * l2 * m2 * c)) / (l2 * den);
+    return [a1, a2];
+  }
+  function deriv(s) { const a = acc(s[0], s[1], s[2], s[3]); return [s[1], a[0], s[3], a[1]]; }
+  function rk4(s, h) {
+    const k1 = deriv(s);
+    const k2 = deriv(s.map((v, i) => v + 0.5 * h * k1[i]));
+    const k3 = deriv(s.map((v, i) => v + 0.5 * h * k2[i]));
+    const k4 = deriv(s.map((v, i) => v + h * k3[i]));
+    return s.map((v, i) => v + (h / 6) * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]));
+  }
+  function energy(s) {
+    const { m1, m2, l1, l2, g } = P;
+    const [t1, w1, t2, w2] = s;
+    const T = 0.5 * (m1 + m2) * l1 * l1 * w1 * w1 + 0.5 * m2 * l2 * l2 * w2 * w2
+            + m2 * l1 * l2 * w1 * w2 * Math.cos(t1 - t2);
+    const V = -(m1 + m2) * g * l1 * Math.cos(t1) - m2 * g * l2 * Math.cos(t2);
+    return T + V;
+  }
+  const wrap = a => { a = (a + Math.PI) % (2 * Math.PI); if (a < 0) a += 2 * Math.PI; return a - Math.PI; };
+  function sepDist() {
+    if (!z) return NaN;
+    const d = [wrap(y[0] - z[0]), y[1] - z[1], wrap(y[2] - z[2]), y[3] - z[3]];
+    return Math.hypot(...d);
+  }
+
+  // ---------------- canvas helpers ----------------
+  const DPR = () => Math.min(window.devicePixelRatio || 1, 2);
+  function fit(cv) {
+    const r = cv.getBoundingClientRect(), d = DPR();
+    const w = Math.max(1, Math.round(r.width * d)), h = Math.max(1, Math.round(r.height * d));
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; return true; }
+    return false;
+  }
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const COL = { bg: css('--panel'), line: css('--line'), text: css('--text'), muted: css('--muted'),
+    p1: css('--p1'), p2: css('--p2'), twin: css('--twin') };
+  const RAMP = [];
+  for (let i = 0; i < 12; i++) {
+    const u = i / 11;
+    const r = Math.round(40 + 190 * u * u), g = Math.round(90 + 150 * u), b = Math.round(170 + 80 * Math.sqrt(u));
+    RAMP.push(`rgba(${r},${g},${b},${0.35 + 0.5 * u})`);
+  }
+  const PI_TICKS = [-Math.PI, -Math.PI / 2, 0, Math.PI / 2, Math.PI];
+  const PI_LABELS = ['−π', '−π/2', '0', 'π/2', 'π'];
+
+  function plotMap(cv, xr, yr) {
+    const d = DPR(), m = { l: 38 * d, r: 10 * d, t: 10 * d, b: 28 * d };
+    const W = cv.width, H = cv.height;
+    const sx = (W - m.l - m.r) / (xr[1] - xr[0]), sy = (H - m.t - m.b) / (yr[1] - yr[0]);
+    return { m, W, H,
+      X: a => m.l + (a - xr[0]) * sx, Y: b => H - m.b - (b - yr[0]) * sy,
+      iX: X => xr[0] + (X - m.l) / sx, iY: Y => yr[0] + (H - m.b - Y) / sy };
+  }
+  function drawAxes(ctx, M, xticks, xlabels, yticks, xl, yl) {
+    const d = DPR();
+    ctx.strokeStyle = 'rgba(140,155,180,0.12)'; ctx.lineWidth = 1;
+    ctx.fillStyle = COL.muted; ctx.font = `${11 * d}px system-ui, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    xticks.forEach((v, i) => {
+      const X = M.X(v);
+      ctx.beginPath(); ctx.moveTo(X, M.m.t); ctx.lineTo(X, M.H - M.m.b); ctx.stroke();
+      ctx.fillText(xlabels ? xlabels[i] : v, X, M.H - M.m.b + 5 * d);
+    });
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    yticks.forEach(v => {
+      const Y = M.Y(v);
+      ctx.beginPath(); ctx.moveTo(M.m.l, Y); ctx.lineTo(M.W - M.m.r, Y); ctx.stroke();
+      ctx.fillText(v, M.m.l - 6 * d, Y);
+    });
+    ctx.strokeStyle = COL.line; ctx.lineWidth = 1.2 * d;
+    ctx.strokeRect(M.m.l, M.m.t, M.W - M.m.l - M.m.r, M.H - M.m.t - M.m.b);
+    ctx.fillStyle = COL.text; ctx.font = `italic ${13 * d}px Georgia, serif`;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+    ctx.fillText(xl, M.W - M.m.r - 6 * d, M.H - M.m.b - 4 * d);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText(yl, M.m.l + 6 * d, M.m.t + 4 * d);
+  }
+  const clipPlot = (ctx, M) => { ctx.beginPath(); ctx.rect(M.m.l, M.m.t, M.W - M.m.l - M.m.r, M.H - M.m.t - M.m.b); ctx.clip(); };
+
+  // ---------------- phase panels with flowing vector field ----------------
+  const WR = 12; // ω range
+  function makePanel(flowId, overId, o) {
+    const flow = document.getElementById(flowId), over = document.getElementById(overId);
+    const p = { flow, over, fctx: flow.getContext('2d'), octx: over.getContext('2d'), ...o,
+      xr: [-Math.PI, Math.PI], yr: [-WR, WR], trail: [], N: 900 };
+    p.px = new Float32Array(p.N); p.py = new Float32Array(p.N); p.age = new Float32Array(p.N);
+    p.seed = i => {
+      p.px[i] = p.xr[0] + Math.random() * (p.xr[1] - p.xr[0]);
+      p.py[i] = p.yr[0] + Math.random() * (p.yr[1] - p.yr[0]);
+      p.age[i] = Math.random() * 80;
+    };
+    for (let i = 0; i < p.N; i++) p.seed(i);
+    p.map = () => plotMap(over, p.xr, p.yr);
+    let dragging = false;
+    const setFromEvt = e => {
+      const r = over.getBoundingClientRect(), d = DPR(), M = p.map();
+      const a = Math.min(p.xr[1], Math.max(p.xr[0], M.iX((e.clientX - r.left) * d)));
+      const b = Math.min(p.yr[1], Math.max(p.yr[0], M.iY((e.clientY - r.top) * d)));
+      p.set(a, b);
+      newStart(false);
+    };
+    over.addEventListener('pointerdown', e => { dragging = true; over.setPointerCapture(e.pointerId); setFromEvt(e); });
+    over.addEventListener('pointermove', e => { if (dragging) setFromEvt(e); });
+    over.addEventListener('pointerup', () => dragging = false);
+    over.addEventListener('pointercancel', () => dragging = false);
+    return p;
+  }
+  const panel1 = makePanel('p1Flow', 'p1Over', {
+    xl: 'θ₁', yl: 'ω₁', color: COL.p1, fieldScale: 40,
+    field: (a, b) => [b, acc(a, b, y[2], y[3])[0]],
+    get: s => [wrap(s[0]), s[1]],
+    set: (a, b) => { y[0] = a; y[1] = b; },
+  });
+  const panel2 = makePanel('p2Flow', 'p2Over', {
+    xl: 'θ₂', yl: 'ω₂', color: COL.p2, fieldScale: 40,
+    field: (a, b) => [b, acc(y[0], y[1], a, b)[1]],
+    get: s => [wrap(s[2]), s[3]],
+    set: (a, b) => { y[2] = a; y[3] = b; },
+  });
+  const panels = [panel1, panel2];
+
+  function stepParticles(p) {
+    const M = p.map(), ctx = p.fctx;
+    // fade old streaks toward transparent (no colour residue builds up)
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = 'rgba(0,0,0,0.06)';
+    ctx.fillRect(0, 0, p.flow.width, p.flow.height);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.save(); clipPlot(ctx, M);
+    ctx.lineWidth = 1.1 * DPR(); ctx.lineCap = 'round';
+    const buckets = RAMP.map(() => []);
+    const h = 0.012;
+    for (let i = 0; i < p.N; i++) {
+      const a = p.px[i], b = p.py[i];
+      const f = p.field(a, b);
+      const sp = Math.hypot(f[0], f[1]);
+      const k = Math.max(0.15, Math.min(1, 3 / (sp + 1e-9)));
+      let na = a + f[0] * h * k, nb = b + f[1] * h * k;
+      p.age[i] += 1;
+      if (nb < p.yr[0] || nb > p.yr[1] || p.age[i] > 120 || !isFinite(na) || !isFinite(nb)) { p.seed(i); p.age[i] = 0; continue; }
+      if (na < p.xr[0] || na > p.xr[1]) { p.px[i] = wrap(na); p.py[i] = nb; continue; }
+      const bi = Math.min(RAMP.length - 1, Math.floor((sp / p.fieldScale) * RAMP.length));
+      buckets[bi].push(M.X(a), M.Y(b), M.X(na), M.Y(nb));
+      p.px[i] = na; p.py[i] = nb;
+    }
+    buckets.forEach((seg, bi) => {
+      if (!seg.length) return;
+      ctx.strokeStyle = RAMP[bi]; ctx.beginPath();
+      for (let j = 0; j < seg.length; j += 4) { ctx.moveTo(seg[j], seg[j + 1]); ctx.lineTo(seg[j + 2], seg[j + 3]); }
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  function drawTrail(ctx, M, tr, color, width, alphaMax) {
+    const n = tr.length, chunks = 24, d = DPR();
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (let c = 0; c < chunks; c++) {
+      const i0 = Math.floor((c / chunks) * n), i1 = Math.floor(((c + 1) / chunks) * n);
+      ctx.globalAlpha = alphaMax * (0.06 + 0.94 * ((c + 1) / chunks) ** 1.6);
+      ctx.strokeStyle = color; ctx.lineWidth = width * d;
+      ctx.beginPath();
+      let pen = false;
+      for (let i = Math.max(0, i0 - 1); i <= Math.min(n - 1, i1); i++) {
+        const q = tr[i];
+        if (!q) { pen = false; continue; }
+        const X = M.X(q[0]), Y = M.Y(q[1]);
+        if (!pen) { ctx.moveTo(X, Y); pen = true; } else ctx.lineTo(X, Y);
+      }
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+  function glowDot(ctx, X, Y, color, r) {
+    const d = DPR();
+    const grd = ctx.createRadialGradient(X, Y, 0, X, Y, r * d);
+    grd.addColorStop(0, color); grd.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(X, Y, r * d, 0, 2 * Math.PI); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(X, Y, 3.2 * d, 0, 2 * Math.PI); ctx.fill();
+  }
+
+  function drawPanelOverlay(p) {
+    const M = p.map(), ctx = p.octx;
+    ctx.clearRect(0, 0, M.W, M.H);
+    drawAxes(ctx, M, PI_TICKS, PI_LABELS, [-12, -6, 0, 6, 12], p.xl, p.yl);
+    ctx.save(); clipPlot(ctx, M);
+    if (showTwin && p.twinTrail) drawTrail(ctx, M, p.twinTrail, COL.twin, 1.4, 0.55);
+    drawTrail(ctx, M, p.trail, p.color, 2, 1);
+    if (showTwin && z) { const [a, b] = p.get(z); const d = DPR();
+      ctx.fillStyle = COL.twin; ctx.beginPath(); ctx.arc(M.X(a), M.Y(b), 3.5 * d, 0, 2 * Math.PI); ctx.fill(); }
+    const [a, b] = p.get(y);
+    glowDot(ctx, M.X(a), M.Y(b), p.color, 16);
+    ctx.restore();
+  }
+
+  function pushTrail(tr, pt) {
+    const last = tr[tr.length - 1];
+    if (last && Math.abs(pt[0] - last[0]) > Math.PI) tr.push(null);
+    tr.push(pt);
+    if (tr.length > 1500) tr.splice(0, tr.length - 1500);
+  }
+  panels.forEach(p => p.twinTrail = []);
+  function pushTrails() {
+    panels.forEach(p => {
+      pushTrail(p.trail, p.get(y));
+      if (showTwin && z) pushTrail(p.twinTrail, p.get(z));
+    });
+  }
+
+  // ---------------- Poincaré section ----------------
+  const poincCv = document.getElementById('poincCv'), pctx = poincCv.getContext('2d');
+  const poinc = []; // [θ1, ω1, hue]
+  let hue = 200;
+  const PR = [-Math.PI, Math.PI], PW = [-WR, WR];
+  function checkSection(prev, cur) {
+    // θ2 crosses 0 (mod 2π) going upward
+    const a = wrap(prev[2]), b = wrap(cur[2]);
+    if (a < 0 && b >= 0 && b - a < Math.PI && cur[3] > 0) {
+      const u = -a / (b - a);
+      const th1 = wrap(prev[0] + u * wrap(cur[0] - prev[0]));
+      const w1 = prev[1] + u * (cur[1] - prev[1]);
+      poinc.push([th1, w1, hue]);
+      if (poinc.length > 40000) poinc.splice(0, poinc.length - 40000);
+    }
+  }
+  function drawPoinc() {
+    const M = plotMap(poincCv, PR, PW), ctx = pctx, d = DPR();
+    ctx.clearRect(0, 0, M.W, M.H);
+    drawAxes(ctx, M, PI_TICKS, PI_LABELS, [-12, -6, 0, 6, 12], 'θ₁', 'ω₁');
+    ctx.save(); clipPlot(ctx, M);
+    const n = poinc.length, r = 1.9 * d;
+    for (let i = 0; i < n; i++) {
+      const q = poinc[i];
+      ctx.fillStyle = `hsla(${q[2]},85%,68%,${i > n - 6 ? 1 : 0.75})`;
+      ctx.fillRect(M.X(q[0]) - r, M.Y(q[1]) - r, 2 * r, 2 * r);
+    }
+    if (n) { const q = poinc[n - 1]; glowDot(ctx, M.X(q[0]), M.Y(q[1]), `hsl(${q[2]},85%,68%)`, 12); }
+    ctx.restore();
+  }
+
+  // ---------------- motion view ----------------
+  const motionCv = document.getElementById('motionCv'), mctx = motionCv.getContext('2d');
+  const bobTrail = [], twinBobTrail = [];
+  function geom() {
+    const W = motionCv.width, H = motionCv.height;
+    const scale = Math.min(W, H) * 0.46 / (P.l1 + P.l2);
+    const ox = W / 2, oy = H / 2;
+    return { W, H, scale, ox, oy };
+  }
+  function bobs(s, G) {
+    const x1 = G.ox + P.l1 * Math.sin(s[0]) * G.scale, y1 = G.oy + P.l1 * Math.cos(s[0]) * G.scale;
+    const x2 = x1 + P.l2 * Math.sin(s[2]) * G.scale, y2 = y1 + P.l2 * Math.cos(s[2]) * G.scale;
+    return [x1, y1, x2, y2];
+  }
+  function drawPathTrail(ctx, tr, color, width, alphaMax) {
+    const d = DPR(), n = tr.length, G = geom();
+    const S = q => [G.ox + q[0] * G.scale, G.oy + q[1] * G.scale];
+    ctx.lineCap = 'round';
+    for (let i = 1; i < n; i++) {
+      ctx.globalAlpha = alphaMax * (i / n) ** 1.8;
+      ctx.strokeStyle = color; ctx.lineWidth = width * d;
+      const a = S(tr[i - 1]), b = S(tr[i]);
+      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+  function drawArm(ctx, G, s, c1, c2, rodCol, alpha) {
+    const d = DPR(), [x1, y1, x2, y2] = bobs(s, G);
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = rodCol; ctx.lineWidth = 2.5 * d; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(G.ox, G.oy); ctx.lineTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    const rad = m => (0.07 + 0.045 * Math.sqrt(m)) * G.scale * Math.min(1, 1.4 / Math.max(P.l1, P.l2) * 0.75 + 0.25);
+    [[x1, y1, P.m1, c1], [x2, y2, P.m2, c2]].forEach(([bx, by, m, c]) => {
+      const br = Math.max(5 * d, rad(m));
+      const grd = ctx.createRadialGradient(bx - br / 3, by - br / 3, br / 6, bx, by, br);
+      grd.addColorStop(0, '#ffffff'); grd.addColorStop(0.25, c); grd.addColorStop(1, c);
+      ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(bx, by, br, 0, 2 * Math.PI); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  }
+  function drawMotion() {
+    const G = geom(), ctx = mctx, d = DPR();
+    ctx.clearRect(0, 0, G.W, G.H);
+    // reach circle and ceiling
+    ctx.strokeStyle = 'rgba(140,155,180,0.10)'; ctx.lineWidth = 1 * d;
+    [P.l1, P.l1 + P.l2].forEach(r => { ctx.beginPath(); ctx.arc(G.ox, G.oy, r * G.scale, 0, 2 * Math.PI); ctx.stroke(); });
+    ctx.setLineDash([4 * d, 5 * d]); ctx.strokeStyle = 'rgba(140,155,180,0.22)';
+    ctx.beginPath(); ctx.moveTo(G.ox, G.oy); ctx.lineTo(G.ox, G.oy + (P.l1 + P.l2) * G.scale); ctx.stroke();
+    ctx.setLineDash([]);
+    // trails
+    if (showTwin && z) drawPathTrail(ctx, twinBobTrail, COL.twin, 1.5, 0.6);
+    drawPathTrail(ctx, bobTrail, COL.p2, 2, 0.9);
+    // arms
+    if (showTwin && z) drawArm(ctx, G, z, COL.twin, COL.twin, COL.twin, 0.45);
+    drawArm(ctx, G, y, COL.p1, COL.p2, '#c9d3e1', 1);
+    // pivot
+    ctx.fillStyle = '#2a3341'; ctx.fillRect(G.ox - 22 * d, G.oy - 6 * d, 44 * d, 5 * d);
+    ctx.fillStyle = '#0d1015'; ctx.strokeStyle = '#c9d3e1'; ctx.lineWidth = 2 * d;
+    ctx.beginPath(); ctx.arc(G.ox, G.oy, 4 * d, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+  }
+  function recordBobs() {
+    const tip = s => [P.l1 * Math.sin(s[0]) + P.l2 * Math.sin(s[2]), P.l1 * Math.cos(s[0]) + P.l2 * Math.cos(s[2])];
+    bobTrail.push(tip(y));
+    if (bobTrail.length > 500) bobTrail.shift();
+    if (showTwin && z) { twinBobTrail.push(tip(z)); if (twinBobTrail.length > 500) twinBobTrail.shift(); }
+  }
+  // drag a bob in the motion view
+  let dragBob = 0;
+  motionCv.addEventListener('pointerdown', e => {
+    const r = motionCv.getBoundingClientRect(), d = DPR(), G = geom();
+    const mx = (e.clientX - r.left) * d, my = (e.clientY - r.top) * d;
+    const [x1, y1, x2, y2] = bobs(y, G);
+    const d1 = Math.hypot(mx - x1, my - y1), d2 = Math.hypot(mx - x2, my - y2);
+    dragBob = d2 < d1 ? 2 : 1;
+    motionCv.setPointerCapture(e.pointerId); motionCv.style.cursor = 'grabbing';
+    moveBob(e);
+  });
+  function moveBob(e) {
+    if (!dragBob) return;
+    const r = motionCv.getBoundingClientRect(), d = DPR(), G = geom();
+    const mx = (e.clientX - r.left) * d, my = (e.clientY - r.top) * d;
+    if (dragBob === 1) { y[0] = Math.atan2(mx - G.ox, my - G.oy); }
+    else { const [x1, y1] = bobs(y, G); y[2] = Math.atan2(mx - x1, my - y1); }
+    y[1] = 0; y[3] = 0;
+    newStart(false);
+  }
+  motionCv.addEventListener('pointermove', moveBob);
+  const endDrag = () => { dragBob = 0; motionCv.style.cursor = 'grab'; };
+  motionCv.addEventListener('pointerup', endDrag);
+  motionCv.addEventListener('pointercancel', endDrag);
+
+  // ---------------- separation plot ----------------
+  const sepCv = document.getElementById('sepCv'), sctx = sepCv.getContext('2d');
+  const sepHist = []; const SWIN = 30;
+  function drawSep() {
+    const W = sepCv.width, H = sepCv.height, d = DPR(), ctx = sctx;
+    ctx.clearRect(0, 0, W, H);
+    const m = { l: 38 * d, r: 8 * d, t: 6 * d, b: 18 * d };
+    const t1 = Math.max(SWIN, tTwin), t0 = t1 - SWIN;
+    const X = tt => m.l + ((tt - t0) / SWIN) * (W - m.l - m.r);
+    const Y = v => m.t + (1 - (v + 7) / 8) * (H - m.t - m.b);
+    ctx.strokeStyle = 'rgba(140,155,180,0.12)'; ctx.lineWidth = 1;
+    ctx.fillStyle = COL.muted; ctx.font = `${10 * d}px system-ui, sans-serif`;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    [-6, -4, -2, 0].forEach(v => {
+      ctx.beginPath(); ctx.moveTo(m.l, Y(v)); ctx.lineTo(W - m.r, Y(v)); ctx.stroke();
+      ctx.fillText(v, m.l - 5 * d, Y(v));
+    });
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (let s = Math.ceil(t0 / 5) * 5; s <= t1; s += 5) ctx.fillText(`${s}s`, X(s), H - m.b + 3 * d);
+    if (!showTwin) {
+      ctx.fillStyle = COL.muted; ctx.font = `${12 * d}px system-ui, sans-serif`; ctx.textBaseline = 'middle';
+      ctx.fillText('Twin pendulum is off', W / 2, H / 2); return;
+    }
+    ctx.save(); ctx.beginPath(); ctx.rect(m.l, m.t, W - m.l - m.r, H - m.t - m.b); ctx.clip();
+    const grad = ctx.createLinearGradient(0, Y(-6), 0, Y(1));
+    grad.addColorStop(0, COL.p1); grad.addColorStop(1, COL.twin);
+    ctx.strokeStyle = grad; ctx.lineWidth = 2 * d; ctx.beginPath();
+    sepHist.forEach((h, i) => { const Xp = X(h[0]), Yp = Y(h[1]); i ? ctx.lineTo(Xp, Yp) : ctx.moveTo(Xp, Yp); });
+    ctx.stroke(); ctx.restore();
+  }
+
+  // ---------------- state management ----------------
+  function newStart(resetTime) {
+    if (resetTime) t = 0;
+    z = [y[0] + EPS, y[1], y[2], y[3]];
+    tTwin = 0; sepHist.length = 0;
+    panels.forEach(p => { p.trail.push(null); p.twinTrail.length = 0; });
+    bobTrail.length = 0; twinBobTrail.length = 0;
+    E0 = energy(y);
+    hue = (hue + 47) % 360;
+  }
+  function clearTrails() { panels.forEach(p => { p.trail.length = 0; p.twinTrail.length = 0; }); bobTrail.length = 0; twinBobTrail.length = 0; }
+  function startFromAngles() {
+    y = [init.a1, 0, init.a2, 0];
+    clearTrails(); newStart(true);
+  }
+
+  // ---------------- UI ----------------
+  const $ = id => document.getElementById(id);
+  const fmt = (v, n = 2) => (v >= 0 ? ' ' : '') + v.toFixed(n);
+  const deg = r => (r * 180 / Math.PI);
+  const pKeys = ['m1', 'm2', 'l1', 'l2', 'g'];
+  function syncUI() {
+    pKeys.forEach(k => { $(k).value = P[k]; $(k + 'V').textContent = (+P[k]).toFixed(2); });
+    $('a1').value = deg(init.a1).toFixed(1); $('a1V').textContent = deg(init.a1).toFixed(1) + '°';
+    $('a2').value = deg(init.a2).toFixed(1); $('a2V').textContent = deg(init.a2).toFixed(1) + '°';
+  }
+  pKeys.forEach(k => $(k).addEventListener('input', e => {
+    P[k] = parseFloat(e.target.value); $(k + 'V').textContent = P[k].toFixed(2);
+    $('preset').value = '';
+    newStart(false);
+  }));
+  ['a1', 'a2'].forEach(k => $(k).addEventListener('input', e => {
+    init[k] = parseFloat(e.target.value) * Math.PI / 180;
+    $(k + 'V').textContent = parseFloat(e.target.value).toFixed(1) + '°';
+    $('preset').value = '';
+    startFromAngles();
+  }));
+  $('speed').addEventListener('input', e => { speed = +e.target.value; $('speedV').textContent = speed.toFixed(2) + '×'; });
+  $('speedV').textContent = '1.00×';
+  $('playBtn').onclick = () => { running = !running; $('playBtn').textContent = running ? 'Pause' : 'Play'; };
+  $('resetBtn').onclick = startFromAngles;
+  $('clearBtn').onclick = clearTrails;
+  $('clearPoinc').onclick = () => { poinc.length = 0; };
+  $('twinT').onchange = e => { showTwin = e.target.checked; newStart(false); };
+  $('kickBtn').onclick = () => {
+    init.a1 = (Math.random() * 2 - 1) * Math.PI * 0.9;
+    init.a2 = (Math.random() * 2 - 1) * Math.PI * 0.9;
+    syncUI(); $('preset').value = ''; startFromAngles();
+  };
+  const PRESETS = {
+    // normal-mode angles for m1=m2, l1=l2: θ2/θ1 = ±√2
+    small:    { P: { m1: 1, m2: 1, l1: 1, l2: 1, g: 9.81 }, a1: 12, a2: -8 },
+    mode1:    { P: { m1: 1, m2: 1, l1: 1, l2: 1, g: 9.81 }, a1: 8, a2: 8 * Math.SQRT2 },
+    mode2:    { P: { m1: 1, m2: 1, l1: 1, l2: 1, g: 9.81 }, a1: 8, a2: -8 * Math.SQRT2 },
+    moderate: { P: { m1: 1, m2: 1, l1: 1, l2: 1, g: 9.81 }, a1: 60, a2: 40 },
+    chaos:    { P: { m1: 1, m2: 1, l1: 1, l2: 1, g: 9.81 }, a1: 120, a2: -20 },
+    flip:     { P: { m1: 1, m2: 1, l1: 1, l2: 1, g: 9.81 }, a1: 179, a2: 179.5 },
+  };
+  $('preset').addEventListener('change', e => {
+    const pr = PRESETS[e.target.value]; if (!pr) return;
+    Object.assign(P, pr.P);
+    init.a1 = pr.a1 * Math.PI / 180; init.a2 = pr.a2 * Math.PI / 180;
+    syncUI(); startFromAngles();
+  });
+  syncUI();
+
+  function updateStats() {
+    $('sT').textContent = t.toFixed(2) + ' s';
+    $('sA1').textContent = fmt(wrap(y[0])) + ' rad'; $('sW1').textContent = fmt(y[1]);
+    $('sA2').textContent = fmt(wrap(y[2])) + ' rad'; $('sW2').textContent = fmt(y[3]);
+    const E = energy(y);
+    $('sE').textContent = fmt(E, 3);
+    $('sDE').textContent = ((E - E0) / Math.max(1e-9, Math.abs(E0))).toExponential(1);
+    $('sNP').textContent = poinc.length.toLocaleString();
+  }
+
+  // ---------------- main loop ----------------
+  function resizeAll() {
+    [motionCv, poincCv, sepCv].forEach(fit);
+    panels.forEach(p => {
+      fit(p.flow);
+      fit(p.over);
+    });
+  }
+  window.addEventListener('resize', resizeAll);
+
+  // keep every canvas buffer matched to its on-screen size, whatever changes it
+  const ro = new ResizeObserver(() => resizeAll());
+  document.querySelectorAll('.cv').forEach(el => ro.observe(el));
+  resizeAll();
+  newStart(true);
+
+  let last = performance.now(), statTick = 0, sepTick = 0;
+  const H_STEP = 0.001;
+  function frame(now) {
+    const dt = Math.min((now - last) / 1000, 1 / 30); last = now;
+    if (running && !dragBob) {
+      const nsteps = Math.max(1, Math.round((speed * dt) / H_STEP));
+      for (let i = 0; i < nsteps; i++) {
+        const prev = y;
+        y = rk4(y, H_STEP);
+        checkSection(prev, y);
+        if (showTwin && z) z = rk4(z, H_STEP);
+        t += H_STEP; tTwin += H_STEP;
+      }
+      if (!y.every(isFinite)) { startFromAngles(); }
+      pushTrails(); recordBobs();
+      if (showTwin && (sepTick += dt) > 0.03) {
+        sepHist.push([tTwin, Math.log10(Math.max(1e-12, sepDist()))]); sepTick = 0;
+        while (sepHist.length && sepHist[0][0] < tTwin - SWIN - 1) sepHist.shift();
+      }
+    }
+    panels.forEach(p => { stepParticles(p); drawPanelOverlay(p); });
+    drawMotion(); drawPoinc(); drawSep();
+    if ((statTick += dt) > 0.1) { updateStats(); statTick = 0; }
+    requestAnimationFrame(frame);
+  }
+  updateStats();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+<footer class="site-footer">
+  <p>&copy; 2026 University of Illinois Urbana-Champaign. All rights reserved.</p>
+  <p class="ai-ack">Content assisted and generated with AI support.</p>
+</footer>
+</html>

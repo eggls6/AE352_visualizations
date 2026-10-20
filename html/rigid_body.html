@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rigid Body Explorer</title>
+<style>
+  :root {
+    --bg: #081222;
+    --panel: #0e1b30;
+    --panel2: #132540;
+    --line: #20385a;
+    --text: #e8eef7;
+    --muted: #8fa3bf;
+    --accent: #ff6a2a;
+    --xb: #ff7a45;
+    --yb: #7bd35a;
+    --zb: #4fb3ff;
+    --iax: #b9c8dd;
+    --w: #ffffff;
+    --H: #d08cff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: radial-gradient(1200px 700px at 30% -10%, #10264a 0%, var(--bg) 60%) fixed, var(--bg);
+    color: var(--text); font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { display: flex; flex-direction: column; }
+  header { flex: none; position: relative; padding: 12px 200px 2px 20px; }
+  h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: .2px; }
+  h1 .acc { color: var(--accent); }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  #aboutBtn { position: absolute; right: 20px; top: 14px; background: #3a1d10; border-color: #8a3a16; color: #ffd9c7; }
+  #aboutBtn:hover { border-color: var(--accent); }
+  main { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 312px;
+    gap: 14px; padding: 10px 20px 16px; }
+  .card { background: color-mix(in srgb, var(--panel) 92%, transparent); border: 1px solid var(--line); border-radius: 14px;
+    padding: 10px 12px 12px; position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+  .card h2 { flex: none; margin: 0 0 8px; min-height: 24px; font-size: 12px; font-weight: 650; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .8px; display: flex; justify-content: space-between; align-items: center;
+    gap: 8px; white-space: nowrap; overflow: hidden; }
+  .card h2 > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .card.inertial h2 .t { color: #9cc3ff; }
+  .card.body h2 .t { color: var(--accent); }
+  .hint { font-size: 11px; color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
+  .left { display: grid; gap: 14px; min-width: 0; min-height: 0; grid-template-rows: minmax(0, 1.35fr) minmax(0, 1fr); }
+  .row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; min-height: 0; }
+  .cv { position: relative; flex: 1 1 auto; min-height: 0; min-width: 0; }
+  .cv canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .cv.view canvas { cursor: grab; touch-action: none; }
+  .cv.view canvas:active { cursor: grabbing; }
+  aside { display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: #2a4166 transparent; padding-right: 2px; }
+  aside > .card { flex: none; }
+  .ctrl { margin: 6px 0 10px; }
+  .ctrl label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 3px; }
+  .ctrl label .v { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .ctrl.dis { opacity: .4; pointer-events: none; }
+  input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
+  .c-x input { accent-color: var(--xb); } .c-y input { accent-color: var(--yb); } .c-z input { accent-color: var(--zb); }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  button, select { background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 9px; padding: 7px 11px; font: inherit; font-size: 13px; cursor: pointer; }
+  button:hover, select:hover { border-color: #36557f; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #1a0b03; font-weight: 600; }
+  .toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-top: 4px; cursor: pointer; }
+  .toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
+  .stats { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 13px; }
+  .stats span:nth-child(odd) { color: var(--muted); }
+  .stats span:nth-child(even) { font-variant-numeric: tabular-nums; text-align: right; }
+  .legend { display: flex; gap: 12px; font-size: 12px; color: var(--muted); text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .dot { display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin-right: 5px; vertical-align: 3px; }
+  .note { font-size: 12px; color: var(--muted); line-height: 1.5; margin-top: 6px; }
+  .inertia { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 4px; }
+  .inertia div { background: var(--panel2); border: 1px solid var(--line); border-radius: 9px; padding: 5px 6px; text-align: center; font-size: 12px; }
+  .inertia b { display: block; font-size: 14px; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  /* equations card */
+  .tabs { display: flex; gap: 4px; text-transform: none; letter-spacing: 0; }
+  .tabs button { padding: 3px 9px; font-size: 12px; border-radius: 7px; }
+  .tabs button.on { background: #3a1d10; border-color: var(--accent); color: #ffd9c7; }
+  .eqwrap { flex: 1 1 auto; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: #2a4166 transparent; }
+  .m { font-family: "Cambria Math", "STIX Two Math", "Times New Roman", Georgia, serif; font-size: 16px; }
+  .eqbox { display: inline-block; border: 1.5px solid var(--accent); border-radius: 8px; padding: 4px 14px; margin: 2px 0 10px;
+    font-family: "Cambria Math", "STIX Two Math", "Times New Roman", Georgia, serif; font-size: 19px; }
+  .eqgrid { display: grid; grid-template-columns: auto repeat(4, minmax(56px, auto)); gap: 4px 14px; align-items: baseline; font-size: 13px; }
+  .eqgrid .h { color: var(--muted); font-size: 11.5px; text-align: right; }
+  .eqgrid .n { text-align: right; font-variant-numeric: tabular-nums; }
+  .ex { color: var(--xb); } .ey { color: var(--yb); } .ez { color: var(--zb); }
+  .mat { position: relative; display: inline-grid; padding: 2px 9px; gap: 2px 12px; vertical-align: middle; text-align: center;
+    font-family: "Cambria Math", "STIX Two Math", "Times New Roman", Georgia, serif; font-size: 15px; }
+  .mat::before, .mat::after { content: ""; position: absolute; top: 0; bottom: 0; width: 6px; border: 1.5px solid #c9d6e8; }
+  .mat::before { left: 0; border-right: none; border-radius: 3px 0 0 3px; }
+  .mat::after { right: 0; border-left: none; border-radius: 0 3px 3px 0; }
+  .mat.c1 { grid-template-columns: auto; } .mat.c3 { grid-template-columns: repeat(3, auto); }
+  .mat.num { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .eqline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 10px; }
+  .eqline .lbl { color: var(--muted); font-size: 12px; min-width: 34px; }
+  .warn { color: #ffb35c; font-size: 12px; }
+  .small { font-size: 12px; color: var(--muted); }
+
+  /* about dialog */
+  dialog.about { width: min(780px, calc(100% - 32px)); max-height: 86vh; overflow: auto; padding: 22px 28px 24px;
+    background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.55); }
+  dialog.about::backdrop { background: rgba(3,8,16,.7); backdrop-filter: blur(2px); }
+  dialog.about h2 { margin: 0 0 4px; font-size: 19px; }
+  dialog.about h3 { margin: 20px 0 6px; font-size: 12px; font-weight: 650; color: var(--accent); text-transform: uppercase; letter-spacing: .8px; }
+  dialog.about p, dialog.about li { color: #d5deea; line-height: 1.62; font-size: 14px; }
+  dialog.about p { margin: 0 0 10px; }
+  dialog.about ul { margin: 0; padding-left: 20px; }
+  dialog.about li { margin-bottom: 7px; }
+  dialog.about li b { color: var(--text); }
+  dialog.about .m { font-size: 15px; white-space: nowrap; }
+  dialog.about .close { position: sticky; top: 0; float: right; margin: -6px -10px 0 12px; }
+
+  @media (max-height: 760px), (max-width: 1000px) {
+    html, body { height: auto; }
+    .left { grid-template-rows: none; }
+    aside { overflow: visible; }
+    .cv.view { flex: none; aspect-ratio: 1 / 0.9; }
+    .cv.strip { flex: none; height: 240px; }
+    .eqwrap { overflow: visible; }
+  }
+  @media (max-width: 1000px) {
+    main { grid-template-columns: minmax(0, 1fr); padding: 10px 14px 20px; }
+    header { padding: 12px 14px 2px; }
+  }
+  @media (max-width: 620px) {
+    .row2 { grid-template-columns: minmax(0, 1fr); }
+    header { padding-right: 14px; } #aboutBtn { position: static; margin-top: 8px; }
+  }
+
+.site-footer {
+  text-align: center;
+  padding: 20px;
+  /* background-color: #f1f5f9; */
+  /* color: #33475b; */
+  font-size: 0.9rem;
+}
+
+.site-footer p {
+  margin: 5px 0;
+}
+
+.ai-ack {
+  font-style: italic;
+  color: #64748b;
+}
+
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><img src="../logos/uiuc_logo.png" alt="University of Illinois logo", style="max-width: 10%; height: auto;"> </div>
+  <h1>Rigid Body Explorer: <span class="acc">Reference Frames and Euler's Equations</span></h1>
+  <div class="sub">A torque-free (or torqued) triaxial ellipsoid seen from the inertial frame and from the body-fixed frame, with 3-2-1 Euler angles, body rates and Euler's equations, all live.</div>
+  <button id="aboutBtn" onclick="document.getElementById('about').showModal()">About this problem</button>
+</header>
+
+<main>
+  <div class="left">
+    <div class="row2">
+      <div class="card inertial">
+        <h2><span class="t">Inertial frame: axes fixed in space</span><span class="hint">drag to orbit · double-click to reset view</span></h2>
+        <div class="cv view"><canvas id="viewI"></canvas></div>
+      </div>
+      <div class="card body">
+        <h2><span class="t">Body-fixed frame: axes rotate with the body</span><span class="hint">drag to orbit</span></h2>
+        <div class="cv view"><canvas id="viewB"></canvas></div>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="card">
+        <h2><span>Equations, live values</span>
+          <span class="tabs"><button class="on" data-tab="euler">Euler's equations</button><button data-tab="kin">Kinematics 3-2-1</button></span>
+        </h2>
+        <div class="eqwrap" id="tab-euler">
+          <div class="eqbox">M<sub>i</sub> = I ω̇<sub>i</sub> + ω<sub>i</sub> × (I ω<sub>i</sub>)</div>
+          <div class="eqgrid">
+            <span class="h" style="text-align:left">Principal-axis components</span>
+            <span class="h">M<sub>i</sub> (N·m)</span><span class="h">I<sub>i</sub> dω/dt<sub>i</sub></span><span class="h">gyroscopic</span><span class="h">dω/dt<sub>i</sub> (rad/s²)</span>
+            <span class="m ex">M₁ = I₁ṗ + (I₃ − I₂) q r</span><span class="n" id="e_M1"></span><span class="n" id="e_I1"></span><span class="n" id="e_G1"></span><span class="n ex" id="e_d1"></span>
+            <span class="m ey">M₂ = I₂q̇ + (I₁ − I₃) r p</span><span class="n" id="e_M2"></span><span class="n" id="e_I2"></span><span class="n" id="e_G2"></span><span class="n ey" id="e_d2"></span>
+            <span class="m ez">M₃ = I₃ṙ + (I₂ − I₁) p q</span><span class="n" id="e_M3"></span><span class="n" id="e_I3"></span><span class="n" id="e_G3"></span><span class="n ez" id="e_d3"></span>
+          </div>
+          <div class="note">The Euler equations of motion describe the time evolution of <span class="m">ω = [p q r]ᵀ</span> in the body fixed frame. In each row, M<sub>i</sub> = I<sub>i</sub> dω/dt<sub>i</sub> + gyroscopic terms. 
+            M<sub>i</sub> are external torques, and I<sub>i</sub> is the principle moment of inertia. 
+            The gyroscopic terms couple p, q and r. As a consequence, even with M<sub>i</sub> = 0 the body rates keep changing, while the kinetic energy T and the angular momentum H are conserved.
+          </div>
+        </div>
+        <div class="eqwrap" id="tab-kin" style="display:none">
+          <div class="eqline">
+            <span class="m">ω =</span>
+            <span class="mat c1"><span>p</span><span>q</span><span>r</span></span><span class="m">=</span>
+            <span class="mat c3"><span>1</span><span>0</span><span>−sin θ</span>
+              <span>0</span><span>cos φ</span><span>sin φ cos θ</span>
+              <span>0</span><span>−sin φ</span><span>cos φ cos θ</span></span>
+            <span class="mat c1"><span>dφ/dt</span><span>dθ/dt</span><span>dψ/dt</span></span>
+          </div>
+          <div class="eqline">
+            <span class="lbl">now</span>
+            <span class="mat c1 num" id="k_pqr"></span><span>=</span>
+            <span class="mat c3 num" id="k_K"></span>
+            <span class="mat c1 num" id="k_rates"></span>
+          </div>
+          <div class="small">Euler angles (3-2-1): yaw ψ about Z<sub>I</sub>, then pitch θ about the new y, then roll φ about x<sub>b</sub>.
+            The inverse map from body rates <span class="m">ω = [p q r]ᵀ</span> to Euler-angle rates divides by cos θ, so it fails (gimbal lock) at θ = ±90°.
+            The simulation integrates a quaternion internally, so the motion itself never locks.</div>
+          <div class="warn" id="k_warn"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2><span>Time histories</span>
+          <span class="legend"><span><span class="dot" style="background:var(--xb)"></span>p</span>
+            <span><span class="dot" style="background:var(--yb)"></span>q</span>
+            <span><span class="dot" style="background:var(--zb)"></span>r</span>
+            <span><span class="dot" style="background:#ffffff"></span>|ω|</span></span></h2>
+        <div class="cv strip"><canvas id="histCv"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <aside>
+    <div class="card">
+      <h2>Simulation</h2>
+      <div class="btns">
+        <button id="playBtn" class="primary">❚❚ Pause</button>
+        <button id="resetBtn">↺ Reset</button>
+        <button id="trailBtn">Clear trails</button>
+      </div>
+      <div class="ctrl" style="margin-top:10px"><label>Time scale <span class="v" id="speedV"></span></label>
+        <input type="range" id="speed" min="0.1" max="4" step="0.05" value="1"></div>
+      <div class="ctrl"><label>Integration step Δt (RK4) <span class="v" id="dtV"></span></label>
+        <input type="range" id="dt" min="-3" max="-1" step="0.05" value="-2.3"></div>
+      <div class="ctrl" style="margin-bottom:2px"><label for="preset">Preset</label>
+        <select id="preset" style="width:100%"></select></div>
+    </div>
+
+    <div class="card" id="poseCard">
+      <h2>Orientation (Euler 3-2-1)</h2>
+      <div id="angSliders"></div>
+      <h2 style="margin-top:4px">Euler angle rates</h2>
+      <div id="rateSliders"></div>
+      <div class="note" style="margin-top:0">These follow the motion live. Dragging one pauses the motion and sets the state; it resumes when you let go.</div>
+    </div>
+
+    <div class="card">
+      <h2>Body: uniform solid ellipsoid</h2>
+      <div id="shapeSliders"></div>
+      <div class="small">Principal moments of inertia (kg·m²), I₁ = m(b² + c²)/5 and so on:</div>
+      <div class="inertia">
+        <div class="ex">I₁ (x<sub>b</sub>)<b id="I1"></b></div>
+        <div class="ey">I₂ (y<sub>b</sub>)<b id="I2"></b></div>
+        <div class="ez">I₃ (z<sub>b</sub>)<b id="I3"></b></div>
+      </div>
+      <div class="note">The body axes are principal axes, so all products of inertia are zero.</div>
+    </div>
+
+    <div class="card">
+      <h2>External moments M<sub>i</sub> (N·m)</h2>
+      <label class="toggle"><input type="checkbox" id="tfree" checked> Torque-free (M_b = 0)</label>
+      <div id="momSliders"></div>
+    </div>
+
+    <div class="card">
+      <h2>State</h2>
+      <div class="stats">
+        <span>t</span><span id="sT"></span>
+        <span>p, q, r (rad/s)</span><span id="sW"></span>
+        <span>|ω|</span><span id="sWm"></span>
+        <span>Kinetic energy T</span><span id="sE"></span>
+        <span>|H|</span><span id="sH"></span>
+        <span>H in inertial frame</span><span id="sHI"></span>
+        <span>ΔT / T₀</span><span id="sdE"></span>
+        <span>Δ|H| / |H₀|</span><span id="sdH"></span>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<dialog class="about" id="about">
+  <form method="dialog"><button class="close" aria-label="Close">Close ✕</button></form>
+  <h2>Rigid body dynamics: reference frames and Euler's equations</h2>
+
+  <h3>Introduction</h3>
+  <p>A rigid body moving in space has six degrees of freedom (DoF). Those can be decomposed into three DoF for the position of its center of mass and three DoF for its
+  orientation. This explorer only considers the latter, i.e. rotation. The body is a uniformly dense, solid ellipsoid with semi-axes
+  <span class="m">a, b, c</span> turning about its fixed center of mass.</p>
+  <p>Describing the rotation involves two frames of reference. The inertial frame <span class="m">(X<sub>I</sub>, Y<sub>I</sub>, Z<sub>I</sub>)</span>
+  is fixed in space. The body-fixed frame <span class="m">(x<sub>b</sub>, y<sub>b</sub>, z<sub>b</sub>)</span> is locked to and rotates with the body.
+  Newton's laws retain their simplest form in the inertial frame, but the inertia tensor that provides the "resistance" of a body to acceleration along a given axis is constant only in the body frame. Euler's equations
+  are, therefore, written in rotating body axes and Euler angles are needed to describe how the two frames relate.</p>
+
+  <h3>Synopsis</h3>
+  <ul>
+    <li><b>Orientation.</b> The 3-2-1 Euler angles rotate the inertial frame into the body frame in three steps: yaw
+    <span class="m">ψ</span> about Z<sub>I</sub>, then pitch <span class="m">θ</span> about the new y axis, then roll
+    <span class="m">φ</span> about x<sub>b</sub>. The simulation itself integrates a unit quaternion, which never runs into
+    gimbal lock. The Euler angles are computed from it for display.</li>
+    <li><b>Kinematics.</b> The body angular velocity <span class="m">ω = [p q r]ᵀ</span> is a linear combination of the
+    Euler-angle rates, but it is not equal to them. The matrix shown in the Kinematics tab converts one to the other. Turning
+    the rates back into Euler-angle rates requires dividing by <span class="m">cos θ</span>, so the conversion fails at
+    <span class="m">θ = ±90°</span>.</li>
+    <li><b>Euler's equations.</b> In the inertial frame, <span class="m">dH/dt = M</span>. In principal body axes this becomes
+    <span class="m">M = I ω̇ + ω × (I ω)</span>. The cross-product terms, such as <span class="m">(I₃ − I₂) q r</span>, are gyroscopic
+    couplings. They let the angular velocity change even when no external moment acts.</li>
+    <li><b>Conservation laws.</b> With <span class="m">M = 0</span>, the angular momentum vector <span class="m">H</span> stays fixed
+    in the inertial frame, and the kinetic energy <span class="m">T = ½ ωᵀIω</span> stays constant. Seen from the body,
+    <span class="m">H</span> keeps its length but changes direction. Its tip moves along a curve where the sphere
+    <span class="m">|H| = const</span> meets the energy ellipsoid.</li>
+    <li><b>Poinsot's picture.</b> In the body view, the tip of <span class="m">ω</span> traces a closed curve called the polhode.
+    In the inertial view it traces the herpolhode, which lies in a fixed plane perpendicular to <span class="m">H</span>. Both
+    trails are drawn in the views.</li>
+    <li><b>Stability of spin.</b> Steady spin about the axis with the largest or the smallest moment of inertia is stable. Spin
+    about the intermediate axis is unstable: a tiny wobble grows until the body flips over, then the flip repeats periodically.
+    This is called the tennis-racket or Dzhanibekov effect. With friction or flexing, only spin about the major axis is truly
+    stable. That is not modeled here.</li>
+  </ul>
+
+  <h3>Things to investigate</h3>
+  <ul>
+    <li>Compare the two views. Without external torques the inertial axes and <span class="m">H</span> remain fixed the inertial frame while the body tumbles.
+    In the body view the ellipsoid is at rest and the inertial axes move.</li>
+    <li>Run the three spin presets. Only the intermediate-axis spin flips. </li>
+    <li>Turn off "Torque-free" and apply a moment. With the body already spinning, a moment about one axis makes the angular
+    velocity swing toward another axis. This is the gyroscopic response.</li>
+    <li>Make the body symmetric by setting <span class="m">b = c</span>. The polhode becomes a circle and the motion becomes steady
+    precession.</li>
+    <li>Raise the integration step Δt and watch ΔT/T₀ grow. RK4 is accurate but does not conserve energy exactly.</li>
+  </ul>
+</dialog>
+<script>
+  document.getElementById('about').addEventListener('click', e => { if (e.target.id === 'about') e.target.close(); });
+</script>
+
+<script>
+(() => {
+  // =================== math helpers ===================
+  const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const norm = a => Math.hypot(a[0], a[1], a[2]);
+  const scl = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+  const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const unit = a => { const n = norm(a) || 1; return scl(a, 1 / n); };
+  const mv = (M, v) => [M[0][0] * v[0] + M[0][1] * v[1] + M[0][2] * v[2],
+                        M[1][0] * v[0] + M[1][1] * v[1] + M[1][2] * v[2],
+                        M[2][0] * v[0] + M[2][1] * v[1] + M[2][2] * v[2]];
+  const mtv = (M, v) => [M[0][0] * v[0] + M[1][0] * v[1] + M[2][0] * v[2],
+                         M[0][1] * v[0] + M[1][1] * v[1] + M[2][1] * v[2],
+                         M[0][2] * v[0] + M[1][2] * v[1] + M[2][2] * v[2]];
+  const qmul = (a, b) => [a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3],
+                          a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2],
+                          a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1],
+                          a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0]];
+  // quaternion (w,x,y,z) rotating body vectors into the inertial frame
+  function qFromEuler(psi, th, ph) {
+    const qz = [Math.cos(psi / 2), 0, 0, Math.sin(psi / 2)];
+    const qy = [Math.cos(th / 2), 0, Math.sin(th / 2), 0];
+    const qx = [Math.cos(ph / 2), Math.sin(ph / 2), 0, 0];
+    return qmul(qmul(qz, qy), qx);
+  }
+  function Rfromq(q) {   // body -> inertial
+    const [w, x, y, z] = q;
+    return [[1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
+            [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
+            [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)]];
+  }
+  function eulerFromR(R) {  // C = R^T (inertial -> body); 3-2-1
+    const th = -Math.asin(Math.max(-1, Math.min(1, R[2][0])));
+    const psi = Math.atan2(R[1][0], R[0][0]);
+    const ph = Math.atan2(R[2][1], R[2][2]);
+    return [psi, th, ph];
+  }
+  const Kmat = (ph, th) => [[1, 0, -Math.sin(th)],
+                            [0, Math.cos(ph), Math.sin(ph) * Math.cos(th)],
+                            [0, -Math.sin(ph), Math.cos(ph) * Math.cos(th)]];
+  function eulerRates(ph, th, w) { // [phidot, thetadot, psidot]
+    const [p, q, r] = w, s = Math.sin(ph), c = Math.cos(ph), ct = Math.cos(th);
+    const ctS = Math.abs(ct) < 1e-6 ? 1e-6 * Math.sign(ct || 1) : ct;
+    return [p + (q * s + r * c) * Math.tan(th), q * c - r * s, (q * s + r * c) / ctS];
+  }
+
+  // =================== model ===================
+  const S = { a: 2, b: 1.2, c: 0.8, m: 1, I: [1, 1, 1], M: [0, 0, 0], tfree: true, dt: 0.005, speed: 1 };
+  let quat = [1, 0, 0, 0], w = [0, 0, 0], t = 0, running = true;
+  let T0 = 1, H0 = 1, sW = 1, sH = 1;
+  function updInertia() {
+    const { a, b, c, m } = S;
+    S.I = [m * (b * b + c * c) / 5, m * (a * a + c * c) / 5, m * (a * a + b * b) / 5];
+  }
+  const Mnow = () => S.tfree ? [0, 0, 0] : S.M;
+  function wdot(w, M) {
+    const [I1, I2, I3] = S.I, [p, q, r] = w;
+    return [(M[0] - (I3 - I2) * q * r) / I1, (M[1] - (I1 - I3) * r * p) / I2, (M[2] - (I2 - I1) * p * q) / I3];
+  }
+  function deriv(st) {
+    const [q0, q1, q2, q3, p, q, r] = st;
+    const wd = wdot([p, q, r], Mnow());
+    return [0.5 * (-q1 * p - q2 * q - q3 * r), 0.5 * (q0 * p + q2 * r - q3 * q),
+            0.5 * (q0 * q + q3 * p - q1 * r), 0.5 * (q0 * r + q1 * q - q2 * p), wd[0], wd[1], wd[2]];
+  }
+  function rk4(h) {
+    const s0 = [...quat, ...w];
+    const k1 = deriv(s0);
+    const k2 = deriv(s0.map((v, i) => v + 0.5 * h * k1[i]));
+    const k3 = deriv(s0.map((v, i) => v + 0.5 * h * k2[i]));
+    const k4 = deriv(s0.map((v, i) => v + h * k3[i]));
+    const s = s0.map((v, i) => v + (h / 6) * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]));
+    const n = Math.hypot(s[0], s[1], s[2], s[3]);
+    quat = [s[0] / n, s[1] / n, s[2] / n, s[3] / n];
+    w = [s[4], s[5], s[6]];
+    t += h;
+  }
+  const Hb = () => [S.I[0] * w[0], S.I[1] * w[1], S.I[2] * w[2]];
+  const KE = () => 0.5 * (S.I[0] * w[0] * w[0] + S.I[1] * w[1] * w[1] + S.I[2] * w[2] * w[2]);
+
+  function rebase() {   // new reference values & vector scales after any state edit
+    T0 = KE(); H0 = norm(Hb());
+    const ex = Math.max(S.a, S.b, S.c);
+    sW = (ex + 1.0) / Math.max(norm(w), 0.35);
+    sH = (ex + 1.4) / Math.max(H0, 0.35 * Math.max(...S.I));
+    trails.I.length = 0; trails.B.length = 0;
+  }
+
+  // =================== presets ===================
+  const PRESETS = [
+    { id: 'tumble', name: 'General tumbling (template values)', shape: [2, 1.2, 0.8], ang: [45, 20, 30], rates: [0.5, 0.3, 0.4] },
+    { id: 'minor', name: 'Spin about x_b (minimum I): stable', shape: [2, 1.2, 0.8], ang: [0, 10, 0], w: [2.2, 0.12, 0.12] },
+    { id: 'inter', name: 'Spin about y_b (intermediate I): tennis-racket flip', shape: [2, 1.2, 0.8], ang: [0, 0, 0], w: [0.01, 2.0, 0.01] },
+    { id: 'major', name: 'Spin about z_b (maximum I): stable', shape: [2, 1.2, 0.8], ang: [0, 0, 0], w: [0.15, 0.15, 2.0] },
+    { id: 'prolate', name: 'Symmetric rod-like body (b = c): steady precession', shape: [2, 0.9, 0.9], ang: [0, 0, 0], w: [1.8, 0.7, 0] },
+    { id: 'plate', name: 'Wobbling plate (a = b ≫ c)', shape: [1.8, 1.8, 0.35], ang: [0, 20, 0], w: [0.25, 0, 2.0] },
+    { id: 'gyro', name: 'Gyroscopic response: spin about z_b, torque about x_b', shape: [2, 1.2, 0.8], ang: [0, 0, 0], w: [0, 0, 2.0], M: [0.25, 0, 0] },
+  ];
+  let IC = PRESETS[0];
+  function applyIC(p) {
+    IC = p;
+    [S.a, S.b, S.c] = p.shape; S.m = 1; updInertia();
+    const [psi, th, ph] = p.ang.map(v => v * D2R);
+    quat = qFromEuler(psi, th, ph);
+    w = p.w ? [...p.w] : mv(Kmat(ph, th), p.rates);
+    S.M = p.M ? [...p.M] : [0, 0, 0];
+    S.tfree = !p.M;
+    t = 0; hist.length = 0; rebase(); syncUI(true);
+  }
+
+  // =================== 3D views ===================
+  const COL = {};
+  ['--xb', '--yb', '--zb', '--iax', '--w', '--H', '--muted', '--text', '--accent'].forEach(n => COL[n.slice(2)] =
+    getComputedStyle(document.documentElement).getPropertyValue(n).trim());
+  const DPR = () => Math.min(window.devicePixelRatio || 1, 2);
+  const trails = { I: [], B: [] };
+  const NU = 32, NV = 18;
+  const LIGHT_I = unit([0.45, -0.35, 0.82]);
+
+  function makeView(id, frame) {
+    const cv = document.getElementById(id);
+    const v = { cv, ctx: cv.getContext('2d'), frame, az0: 35 * D2R, el0: 22 * D2R };
+    v.az = v.az0; v.el = v.el0;
+    let drag = null;
+    cv.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY, v.az, v.el]; cv.setPointerCapture(e.pointerId); });
+    cv.addEventListener('pointermove', e => {
+      if (!drag) return;
+      v.az = drag[2] - (e.clientX - drag[0]) * 0.008;
+      v.el = Math.max(-1.45, Math.min(1.45, drag[3] + (e.clientY - drag[1]) * 0.008));
+    });
+    const end = () => drag = null;
+    cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+    cv.addEventListener('dblclick', () => { v.az = v.az0; v.el = v.el0; });
+    return v;
+  }
+  const views = [makeView('viewI', 'I'), makeView('viewB', 'B')];
+
+  function camera(v) {
+    const W = v.cv.width, H = v.cv.height, Dc = 14;
+    const ce = Math.cos(v.el);
+    const pos = [Dc * ce * Math.cos(v.az), Dc * ce * Math.sin(v.az), Dc * Math.sin(v.el)];
+    const f = unit(scl(pos, -1));
+    const r = unit(cross(f, [0, 0, 1]));
+    const u = cross(r, f);
+    const ex = Math.max(S.a, S.b, S.c);
+    const extent = Math.max(ex + 2.6, 3.0 + 0.4 * ex) + 0.45;
+    const focal = 0.5 * Math.min(W, H) * Dc / (extent * 1.12);
+    return { pos, f, r, u, focal, cx: W / 2, cy: H * 0.5, W, H };
+  }
+  function proj(C, P) {
+    const d = sub(P, C.pos);
+    const z = dot(d, C.f);
+    return [C.cx + C.focal * dot(d, C.r) / z, C.cy - C.focal * dot(d, C.u) / z, z];
+  }
+
+  // Precomputed ellipsoid mesh in body coordinates (unit sphere params; scaled each frame)
+  const mesh = [];
+  for (let i = 0; i < NU; i++) for (let j = 0; j < NV; j++) mesh.push([i, j]);
+  const sph = (i, j) => { const u = (i / NU) * 2 * Math.PI, vv = (j / NV) * Math.PI;
+    return [Math.cos(u) * Math.sin(vv), Math.sin(u) * Math.sin(vv), Math.cos(vv)]; };
+  const SPH = []; for (let i = 0; i <= NU; i++) { SPH.push([]); for (let j = 0; j <= NV; j++) SPH[i].push(sph(i, j)); }
+
+  function render(v) {
+    const ctx = v.ctx, C = camera(v), d = DPR();
+    const R = Rfromq(quat);
+    const isI = v.frame === 'I';
+    const toW = isI ? (b => mv(R, b)) : (b => b);           // body vector -> view-world
+    const inW = isI ? (x => x) : (x => mtv(R, x));           // inertial vector -> view-world
+    const L = inW(LIGHT_I);
+    ctx.clearRect(0, 0, C.W, C.H);
+
+    // floor grid in the inertial X-Y plane (inertial view only)
+    const ext = Math.max(S.a, S.b, S.c);
+    if (isI) {
+      const zf = -(ext + 0.9), G = 7;
+      ctx.lineWidth = 1 * d;
+      for (let k = -G; k <= G; k++) {
+        [[[k, -G, zf], [k, G, zf]], [[-G, k, zf], [G, k, zf]]].forEach(([A, B]) => {
+          const n = 14;
+          for (let s = 0; s < n; s++) {
+            const P0 = add(A, scl(sub(B, A), s / n)), P1 = add(A, scl(sub(B, A), (s + 1) / n));
+            const a = proj(C, P0), b = proj(C, P1);
+            if (a[2] < 1 || b[2] < 1) continue;
+            const mid = scl(add(P0, P1), 0.5);
+            const fade = Math.max(0, 1 - Math.hypot(mid[0], mid[1]) / (G + 0.5));
+            ctx.strokeStyle = `rgba(90,140,210,${0.32 * fade})`;
+            ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+          }
+        });
+      }
+    }
+
+    const items = [];
+    // ellipsoid faces
+    const ab = [S.a, S.b, S.c];
+    const vert = (i, j) => { const s = SPH[i][j]; return toW([s[0] * ab[0], s[1] * ab[1], s[2] * ab[2]]); };
+    const P = []; for (let i = 0; i <= NU; i++) { P.push([]); for (let j = 0; j <= NV; j++) P[i].push(vert(i, j)); }
+    const PP = P.map(row => row.map(p => proj(C, p)));
+    for (const [i, j] of mesh) {
+      const s = sph(i + 0.5, j + 0.5);
+      const cB = [s[0] * ab[0], s[1] * ab[1], s[2] * ab[2]];
+      const nB = unit([s[0] / ab[0], s[1] / ab[1], s[2] / ab[2]]);
+      const cW = toW(cB), nW = toW(nB);
+      if (dot(nW, sub(C.pos, cW)) <= 0) continue;
+      const view = unit(sub(C.pos, cW));
+      // inertial-fixed 'sun' (shows rotation) + soft camera headlight (keeps the body readable)
+      const lam = 0.62 * Math.max(0, dot(nW, L)) + 0.38 * Math.max(0, dot(nW, view));
+      const hv = unit(add(L, view));
+      const spec = Math.pow(Math.max(0, dot(nW, hv)), 40) * 0.55;
+      const check = ((Math.floor(i / 4) + Math.floor(j / 3)) % 2) ? 1 : 0.86;
+      const k = (0.2 + 0.85 * lam) * check;
+      const col = [Math.min(255, 255 * k * 0.98 + 255 * spec), Math.min(255, 110 * k + 230 * spec), Math.min(255, 40 * k + 200 * spec)];
+      const pts = [PP[i][j], PP[i + 1][j], PP[i + 1][j + 1], PP[i][j + 1]];
+      items.push({ z: proj(C, cW)[2], f: () => {
+        ctx.fillStyle = `rgb(${col[0] | 0},${col[1] | 0},${col[2] | 0})`;
+        ctx.strokeStyle = `rgba(70,22,5,${0.25 + 0.2 * lam})`;
+        ctx.lineWidth = 0.6 * d;
+        ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let q = 1; q < 4; q++) ctx.lineTo(pts[q][0], pts[q][1]);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+      }});
+    }
+
+    // depth-sorted line helper
+    const labels = [];
+    function line3(A, B, color, width, n = 12, dash = false, alpha = 1) {
+      for (let s = 0; s < n; s++) {
+        if (dash && s % 2) continue;
+        const P0 = add(A, scl(sub(B, A), s / n)), P1 = add(A, scl(sub(B, A), (s + 1) / n));
+        const a = proj(C, P0), b = proj(C, P1);
+        items.push({ z: (a[2] + b[2]) / 2 - 0.01, f: () => {
+          ctx.globalAlpha = alpha; ctx.strokeStyle = color; ctx.lineWidth = width * d; ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); ctx.globalAlpha = 1;
+        }});
+      }
+    }
+    function arrow(A, B, color, width, label, lsub, dash = false, alpha = 1) {
+      const len = norm(sub(B, A));
+      if (len < 1e-6) return;
+      const dir = scl(sub(B, A), 1 / len);
+      const back = add(B, scl(dir, -Math.min(0.35, len * 0.3)));
+      line3(A, back, color, width, 14, dash, alpha);
+      const a = proj(C, back), b = proj(C, B);
+      items.push({ z: b[2] - 0.02, f: () => {
+        const dx = b[0] - a[0], dy = b[1] - a[1], L2 = Math.hypot(dx, dy) || 1;
+        const ux = dx / L2, uy = dy / L2, hl = Math.max(8 * d, Math.min(14 * d, L2 * 1.2)), hw = hl * 0.45;
+        ctx.globalAlpha = alpha; ctx.fillStyle = color; ctx.beginPath();
+        ctx.moveTo(b[0], b[1]); ctx.lineTo(b[0] - ux * hl - uy * hw, b[1] - uy * hl + ux * hw);
+        ctx.lineTo(b[0] - ux * hl + uy * hw, b[1] - uy * hl - ux * hw); ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+      }});
+      if (label) { const p = proj(C, add(B, scl(dir, 0.35))); labels.push([label, lsub, p[0], p[1], color, alpha]); }
+    }
+
+    // inertial axes (dashed, light) and body axes (coloured)
+    const IAX = 3.0 + 0.4 * ext;
+    [['X', [1, 0, 0]], ['Y', [0, 1, 0]], ['Z', [0, 0, 1]]].forEach(([n, e]) =>
+      arrow([0, 0, 0], scl(inW(e), IAX), COL.iax, 1.6, n, 'I', true, isI ? 0.95 : 0.7));
+    [['x', [1, 0, 0], S.a, COL.xb], ['y', [0, 1, 0], S.b, COL.yb], ['z', [0, 0, 1], S.c, COL.zb]].forEach(([n, e, s, c]) =>
+      arrow([0, 0, 0], toW(scl(e, s + 1.25)), c, 2.6, n, 'b'));
+
+    // ω and H vectors (capped display length)
+    const cap = v3 => { const n = norm(v3), mx = ext + 2.4; return n > mx ? scl(v3, mx / n) : v3; };
+    const wV = cap(toW(scl(w, sW))), HV = cap(toW(scl(Hb(), sH)));
+    arrow([0, 0, 0], HV, COL.H, 2.4, 'H', '');
+    arrow([0, 0, 0], wV, COL.w, 2.4, 'ω', '');
+
+    // ω-tip trail: herpolhode (inertial view) or polhode (body view)
+    const tr = trails[v.frame];
+    const n = tr.length;
+    for (let k = 1; k < n; k++) {
+      const P0 = isI ? tr[k - 1] : tr[k - 1], P1 = tr[k];
+      const a = proj(C, P0), b = proj(C, P1), al = 0.15 + 0.75 * (k / n);
+      items.push({ z: (a[2] + b[2]) / 2, f: () => {
+        ctx.globalAlpha = al; ctx.strokeStyle = '#ffe9b0'; ctx.lineWidth = 1.6 * d;
+        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); ctx.globalAlpha = 1;
+      }});
+    }
+
+    items.sort((A, B) => B.z - A.z);
+    for (const it of items) it.f();
+
+    // labels on top
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+    const placed = [];
+    for (let [main, subs, x, y, col, al] of labels) {
+      for (let tries = 0; tries < 4 && placed.some(([px, py]) => Math.abs(px - x) < 22 * d && Math.abs(py - y) < 16 * d); tries++) y += 15 * d;
+      placed.push([x, y]);
+      ctx.globalAlpha = al;
+      ctx.fillStyle = col; ctx.font = `italic ${16 * d}px "Times New Roman", Georgia, serif`;
+      const wM = ctx.measureText(main).width;
+      ctx.fillText(main, x - (subs ? 3 * d : 0), y);
+      if (subs) { ctx.font = `italic ${11 * d}px "Times New Roman", Georgia, serif`; ctx.fillText(subs, x + wM / 2 + 1 * d, y + 5 * d); }
+      ctx.globalAlpha = 1;
+    }
+    // corner caption
+    ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.fillStyle = COL.muted;
+    ctx.font = `${11 * d}px system-ui, sans-serif`;
+    ctx.fillText(isI ? 'trail: tip of ω (herpolhode); H stays fixed when torque-free'
+                     : 'trail: tip of ω seen from the body (polhode)', 8 * d, C.H - 6 * d);
+  }
+
+  function recordTrails() {
+    const R = Rfromq(quat);
+    const wb = scl(w, sW);
+    const capL = Math.max(S.a, S.b, S.c) + 2.4;
+    const c = v3 => { const n = norm(v3); return n > capL ? scl(v3, capL / n) : v3; };
+    trails.B.push(c(wb)); trails.I.push(c(mv(R, wb)));
+    const MAX = 900;
+    ['I', 'B'].forEach(k => { if (trails[k].length > MAX) trails[k].splice(0, trails[k].length - MAX); });
+  }
+
+  // =================== time history ===================
+  const histCv = document.getElementById('histCv'), hctx = histCv.getContext('2d');
+  const hist = []; const HWIN = 20; let yR = 2;
+  function drawHist() {
+    const W = histCv.width, H = histCv.height, d = DPR(), ctx = hctx;
+    ctx.clearRect(0, 0, W, H);
+    const m = { l: 40 * d, r: 10 * d, t: 8 * d, b: 22 * d };
+    const t1 = Math.max(HWIN, t), t0 = t1 - HWIN;
+    while (hist.length && hist[0][0] < t0 - 1) hist.shift();
+    let mx = 0.3; hist.forEach(h => { mx = Math.max(mx, Math.abs(h[1]), Math.abs(h[2]), Math.abs(h[3]), h[4]); });
+    yR += (mx * 1.12 - yR) * 0.08;
+    const X = tt => m.l + ((tt - t0) / HWIN) * (W - m.l - m.r);
+    const Y = v => m.t + (1 - (v + yR) / (2 * yR)) * (H - m.t - m.b);
+    ctx.font = `${10.5 * d}px system-ui, sans-serif`; ctx.fillStyle = COL.muted;
+    const step = niceStep(yR);
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for (let v = -Math.floor(yR / step) * step; v <= yR + 1e-9; v += step) {
+      ctx.strokeStyle = Math.abs(v) < 1e-9 ? 'rgba(160,185,220,0.35)' : 'rgba(120,150,200,0.13)';
+      ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(m.l, Y(v)); ctx.lineTo(W - m.r, Y(v)); ctx.stroke();
+      ctx.fillText(+v.toFixed(2), m.l - 6 * d, Y(v));
+    }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (let s = Math.ceil(t0 / 5) * 5; s <= t1; s += 5) ctx.fillText(`${s}s`, X(s), H - m.b + 5 * d);
+    ctx.save(); ctx.translate(11 * d, (m.t + H - m.b) / 2); ctx.rotate(-Math.PI / 2);
+    ctx.textBaseline = 'middle'; ctx.fillText('rad/s', 0, 0); ctx.restore();
+    ctx.save(); ctx.beginPath(); ctx.rect(m.l, m.t, W - m.l - m.r, H - m.t - m.b); ctx.clip();
+    [[4, '#ffffff', 1.2, [5 * d, 4 * d]], [1, COL.xb, 2, []], [2, COL.yb, 2, []], [3, COL.zb, 2, []]].forEach(([k, col, lw, dash]) => {
+      ctx.strokeStyle = col; ctx.lineWidth = lw * d; ctx.setLineDash(dash); ctx.globalAlpha = k === 4 ? 0.55 : 1;
+      ctx.beginPath(); hist.forEach((h, i) => i ? ctx.lineTo(X(h[0]), Y(h[k])) : ctx.moveTo(X(h[0]), Y(h[k]))); ctx.stroke();
+    });
+    ctx.setLineDash([]); ctx.globalAlpha = 1; ctx.restore();
+  }
+  function niceStep(r) { const raw = r / 2.2, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p;
+    return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+
+  // =================== UI ===================
+  const $ = id => document.getElementById(id);
+  const f3 = (v, n = 3) => (v < 0 ? '−' : ' ') + Math.abs(v).toFixed(n);
+  function mkSlider(host, id, label, min, max, step, cls = '') {
+    const div = document.createElement('div'); div.className = 'ctrl ' + cls; div.id = 'c_' + id;
+    div.innerHTML = `<label>${label} <span class="v" id="${id}V"></span></label><input type="range" id="${id}" min="${min}" max="${max}" step="${step}">`;
+    $(host).appendChild(div); return $(id);
+  }
+  const angS = [mkSlider('angSliders', 'psi', 'ψ (yaw)', -180, 180, 0.5, 'c-z'),
+                mkSlider('angSliders', 'th', 'θ (pitch)', -89, 89, 0.5, 'c-y'),
+                mkSlider('angSliders', 'ph', 'φ (roll)', -180, 180, 0.5, 'c-x')];
+  const rateS = [mkSlider('rateSliders', 'dph', 'dφ/dt (rad/s)', -4, 4, 0.01, 'c-x'),
+                 mkSlider('rateSliders', 'dth', 'dθ/dt (rad/s)', -4, 4, 0.01, 'c-y'),
+                 mkSlider('rateSliders', 'dps', 'dψ/dt (rad/s)', -4, 4, 0.01, 'c-z')];
+  const shpS = [mkSlider('shapeSliders', 'sa', 'Semi-axis a (along x_b)', 0.3, 2.5, 0.01, 'c-x'),
+                mkSlider('shapeSliders', 'sb', 'Semi-axis b (along y_b)', 0.3, 2.5, 0.01, 'c-y'),
+                mkSlider('shapeSliders', 'sc', 'Semi-axis c (along z_b)', 0.3, 2.5, 0.01, 'c-z'),
+                mkSlider('shapeSliders', 'sm', 'Mass m (kg)', 0.2, 5, 0.05)];
+  const momS = [mkSlider('momSliders', 'M1', 'M₁ about x_b', -1, 1, 0.01, 'c-x'),
+                mkSlider('momSliders', 'M2', 'M₂ about y_b', -1, 1, 0.01, 'c-y'),
+                mkSlider('momSliders', 'M3', 'M₃ about z_b', -1, 1, 0.01, 'c-z')];
+
+  // pose editing: drag pauses, release resumes
+  let editing = false, wasRunning = false;
+  [...angS, ...rateS].forEach(el => {
+    el.addEventListener('pointerdown', () => { editing = true; wasRunning = running; running = false; });
+    el.addEventListener('change', () => { editing = false; if (wasRunning) running = true; wasRunning = false; syncPlay(); });
+    el.addEventListener('input', () => {
+      const [psi, th, ph] = angS.map(s => +s.value * D2R);
+      const rates = rateS.map(s => +s.value);
+      quat = qFromEuler(psi, th, ph);
+      w = mv(Kmat(ph, th), rates);
+      rebase(); syncUI(false); $('preset').value = '';
+    });
+  });
+  shpS.forEach(el => el.addEventListener('input', () => {
+    [S.a, S.b, S.c, S.m] = shpS.map(s => +s.value); updInertia(); rebase(); syncUI(false); $('preset').value = '';
+  }));
+  momS.forEach(el => el.addEventListener('input', () => { S.M = momS.map(s => +s.value); syncUI(false); }));
+  $('tfree').addEventListener('change', e => { S.tfree = e.target.checked; rebase(); syncUI(false); });
+
+  $('speed').addEventListener('input', e => { S.speed = +e.target.value; $('speedV').textContent = S.speed.toFixed(2) + '×'; });
+  $('dt').addEventListener('input', e => { S.dt = Math.pow(10, +e.target.value); $('dtV').textContent = S.dt.toPrecision(2) + ' s'; });
+  S.dt = Math.pow(10, +$('dt').value);
+  $('speedV').textContent = '1.00×'; $('dtV').textContent = S.dt.toPrecision(2) + ' s';
+  function syncPlay() { $('playBtn').textContent = running ? '❚❚ Pause' : '▶ Play'; }
+  $('playBtn').onclick = () => { running = !running; syncPlay(); };
+  $('resetBtn').onclick = () => applyIC(IC);
+  $('trailBtn').onclick = () => { trails.I.length = 0; trails.B.length = 0; };
+  const sel = $('preset');
+  sel.innerHTML = '<option value="">Choose a preset…</option>' + PRESETS.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  sel.addEventListener('change', () => { const p = PRESETS.find(p => p.id === sel.value); if (p) applyIC(p); });
+  document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+    $('tab-euler').style.display = b.dataset.tab === 'euler' ? '' : 'none';
+    $('tab-kin').style.display = b.dataset.tab === 'kin' ? '' : 'none';
+  });
+
+  function syncUI(all) {
+    const R = Rfromq(quat), [psi, th, ph] = eulerFromR(R);
+    const er = eulerRates(ph, th, w);
+    if (!editing || all) {
+      [psi, th, ph].forEach((v, i) => { angS[i].value = (v * R2D).toFixed(1); });
+      er.forEach((v, i) => { rateS[i].value = v.toFixed(2); });
+    }
+    ['psi', 'th', 'ph'].forEach((k, i) => $(k + 'V').textContent = ([psi, th, ph][i] * R2D).toFixed(1) + '°');
+    ['dph', 'dth', 'dps'].forEach((k, i) => $(k + 'V').textContent = f3(er[i], 2));
+    if (all) { shpS[0].value = S.a; shpS[1].value = S.b; shpS[2].value = S.c; shpS[3].value = S.m;
+      momS.forEach((s, i) => s.value = S.M[i]); $('tfree').checked = S.tfree; }
+    ['sa', 'sb', 'sc', 'sm'].forEach((k, i) => $(k + 'V').textContent = [S.a, S.b, S.c, S.m][i].toFixed(2));
+    ['M1', 'M2', 'M3'].forEach((k, i) => { $(k + 'V').textContent = f3(S.M[i], 2); $('c_' + k).classList.toggle('dis', S.tfree); });
+    S.I.forEach((v, i) => $('I' + (i + 1)).textContent = v.toFixed(3));
+
+    // Euler's equations tab
+    const M = Mnow(), wd = wdot(w, M), [I1, I2, I3] = S.I, [p, q, r] = w;
+    const G = [(I3 - I2) * q * r, (I1 - I3) * r * p, (I2 - I1) * p * q];
+    for (let i = 0; i < 3; i++) {
+      $('e_M' + (i + 1)).textContent = f3(M[i]);
+      $('e_I' + (i + 1)).textContent = f3(S.I[i] * wd[i]);
+      $('e_G' + (i + 1)).textContent = f3(G[i]);
+      $('e_d' + (i + 1)).textContent = f3(wd[i]);
+    }
+    // kinematics tab
+    const K = Kmat(ph, th);
+    $('k_pqr').innerHTML = w.map(v => `<span>${f3(v)}</span>`).join('');
+    $('k_K').innerHTML = K.flat().map(v => `<span>${f3(v)}</span>`).join('');
+    $('k_rates').innerHTML = er.map(v => `<span>${f3(v)}</span>`).join('');
+    $('k_warn').textContent = Math.abs(Math.cos(th)) < 0.1 ? `Near gimbal lock (θ = ${(th * R2D).toFixed(1)}°): the Euler-angle rates blow up even though ω is finite.` : '';
+
+    // state
+    const Hv = Hb(), Hn = norm(Hv), E = KE(), HI = mv(R, Hv);
+    $('sT').textContent = t.toFixed(2) + ' s';
+    $('sW').textContent = w.map(v => f3(v, 2)).join('  ');
+    $('sWm').textContent = norm(w).toFixed(3) + ' rad/s';
+    $('sE').textContent = E.toFixed(4) + ' J';
+    $('sH').textContent = Hn.toFixed(4) + ' N·m·s';
+    $('sHI').textContent = HI.map(v => f3(v, 2)).join('  ');
+    $('sdE').textContent = S.tfree ? ((E - T0) / Math.max(1e-12, T0)).toExponential(1) : 'torque applied';
+    $('sdH').textContent = S.tfree ? ((Hn - H0) / Math.max(1e-12, H0)).toExponential(1) : 'torque applied';
+  }
+
+  // =================== layout & loop ===================
+  function fit(cv) {
+    const r = cv.getBoundingClientRect(), d = DPR();
+    const W = Math.max(1, Math.round(r.width * d)), H = Math.max(1, Math.round(r.height * d));
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  }
+  const resizeAll = () => { views.forEach(v => fit(v.cv)); fit(histCv); };
+  const ro = new ResizeObserver(resizeAll);
+  document.querySelectorAll('.cv').forEach(el => ro.observe(el));
+  window.addEventListener('resize', resizeAll);
+  resizeAll();
+
+  applyIC(PRESETS[0]);
+  sel.value = PRESETS[0].id;
+
+  let last = performance.now(), acc = 0, uiTick = 0, histTick = 0, trailTick = 0;
+  function frame(now) {
+    const fdt = Math.min((now - last) / 1000, 1 / 20); last = now;
+    if (running) {
+      acc += fdt * S.speed;
+      let guard = 0;
+      while (acc >= S.dt && guard++ < 4000) { rk4(S.dt); acc -= S.dt; }
+      if (!w.every(isFinite)) applyIC(IC);
+      if ((trailTick += fdt) > 1 / 60) { recordTrails(); trailTick = 0; }
+      if ((histTick += fdt) > 0.03) { hist.push([t, w[0], w[1], w[2], norm(w)]); histTick = 0; }
+    }
+    views.forEach(render);
+    drawHist();
+    if ((uiTick += fdt) > 0.08) { syncUI(false); uiTick = 0; }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+<footer class="site-footer">
+  <p>&copy; 2026 University of Illinois Urbana-Champaign. All rights reserved.</p>
+  <p class="ai-ack">Content assisted and generated with AI support.</p>
+</footer>
+</html>
